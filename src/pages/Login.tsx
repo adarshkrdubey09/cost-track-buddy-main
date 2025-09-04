@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ export default function Login() {
     userloginname: "",
     password: "",
   });
+
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -19,32 +20,49 @@ export default function Login() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Mock authentication - replace with actual auth later
-    if (formData.userloginname && formData.password) {
+    try {
+      const res = await fetch("https://ai.rosmerta.dev/expense/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!res.ok) {
+        throw new Error("Invalid credentials");
+      }
+
+      const data = await res.json();
+
+      // Save authentication data
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("userloginname", data.user.userloginname);
+      localStorage.setItem("userfirstname", data.user.userfirstname);
+      localStorage.setItem("userlastname", data.user.userlastname);
       localStorage.setItem("isAuthenticated", "true");
-      localStorage.setItem("userEmail", formData.userloginname);
-      
+
       toast({
         title: "Login successful!",
-        description: "Welcome back to ExpenseTracker",
+        description: `Welcome ${data.user.userfirstname} ${data.user.userlastname}`,
       });
-      
-      navigate("/chat");
-    } else {
+
+      navigate("/home");
+    } catch (error) {
       toast({
         title: "Login failed",
-        description: "Please enter valid credentials",
+        description: "Invalid username or password",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     }));
   };
 
@@ -66,7 +84,7 @@ export default function Login() {
             required
           />
         </div>
-        
+
         <div className="space-y-2">
           <Label htmlFor="password">Password</Label>
           <Input
@@ -80,15 +98,10 @@ export default function Login() {
           />
         </div>
 
-        <Button 
-          type="submit" 
-          className="w-full" 
-          disabled={isLoading}
-        >
+        <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading ? "Signing in..." : "Sign In"}
         </Button>
       </form>
-
     </AuthLayout>
   );
 }

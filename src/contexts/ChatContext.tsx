@@ -67,7 +67,8 @@ export const ChatProvider = ({ children }: ChatProviderProps) => {
   };
 
   const addMessage = (message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
-    if (!currentSession) return;
+  setCurrentSession(prevSession => {
+    if (!prevSession) return null;
 
     const newMessage: ChatMessage = {
       ...message,
@@ -75,19 +76,24 @@ export const ChatProvider = ({ children }: ChatProviderProps) => {
       timestamp: new Date()
     };
 
-    const updatedSession = {
-      ...currentSession,
-      messages: [...currentSession.messages, newMessage],
+    const updatedSession: ChatSession = {
+      ...prevSession,
+      messages: [...prevSession.messages, newMessage],
       updatedAt: new Date(),
-      title: currentSession.messages.length === 0 && message.role === 'user' 
-        ? message.content.slice(0, 50) + (message.content.length > 50 ? '...' : '')
-        : currentSession.title
+      title:
+        prevSession.messages.length === 0 && message.role === 'user'
+          ? message.content.slice(0, 50) +
+            (message.content.length > 50 ? '...' : '')
+          : prevSession.title
     };
 
-    setCurrentSession(updatedSession);
-    setSessions(prev => prev.map(s => s.id === updatedSession.id ? updatedSession : s));
-  };
+    setSessions(prev =>
+      prev.map(s => (s.id === updatedSession.id ? updatedSession : s))
+    );
 
+    return updatedSession;
+  });
+};
   return (
     <ChatContext.Provider
       value={{

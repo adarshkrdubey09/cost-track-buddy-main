@@ -2,8 +2,15 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { ExpenseTable } from "@/components/ExpenseTable";
-import { Expense } from "@/types/expense";
 import { useToast } from "@/hooks/use-toast";
+
+interface Expense {
+  id: string;
+  state: string;
+  state_id: string;
+  month: string;
+  year: number;
+}
 
 export default function EditExpense() {
   const { id } = useParams<{ id: string }>();
@@ -20,9 +27,9 @@ export default function EditExpense() {
 
     // Load expense data
     if (id) {
-      const expenses = JSON.parse(localStorage.getItem("expenses") || "[]");
-      const foundExpense = expenses.find((exp: Expense) => exp.id === id);
-      
+      const expenses: Expense[] = JSON.parse(localStorage.getItem("expenses") || "[]");
+      const foundExpense = expenses.find((exp) => exp.id === id);
+
       if (foundExpense) {
         setExpense(foundExpense);
       } else {
@@ -60,8 +67,9 @@ export default function EditExpense() {
           selectedState={expense.state}
           selectedMonth={expense.month}
           selectedYear={expense.year}
+          selectedStateId={expense.state_id}
           isEditMode={true}
-          expenseId={expense.id}
+          isEditingEnabled={true}
         />
       </div>
     </Layout>
