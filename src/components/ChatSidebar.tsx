@@ -7,8 +7,9 @@ export const ChatSidebar = () => {
   const { sessions, currentSession, createNewSession, loadSession } = useChatContext();
 
   return (
-    <div className="w-64 border-r bg-muted/30 flex flex-col h-full">
-      <div className="p-4 border-b">
+    <div className="w-64 border-r bg-muted/30 flex flex-col h-screen"> {/* full screen height */}
+      {/* New Chat Button */}
+      <div className="p-4 border-b flex-shrink-0">
         <Button 
           onClick={createNewSession}
           className="w-full justify-start gap-2"
@@ -19,7 +20,8 @@ export const ChatSidebar = () => {
         </Button>
       </div>
       
-      <ScrollArea className="flex-1">
+      {/* Scrollable Chat Sessions */}
+      <ScrollArea className="flex-1"> {/* flex-1 ensures it takes remaining height */}
         <div className="p-2 space-y-1">
           {sessions.map((session) => (
             <Button
@@ -41,7 +43,7 @@ export const ChatSidebar = () => {
               </div>
             </Button>
           ))}
-          
+
           {sessions.length === 0 && (
             <div className="text-center text-muted-foreground text-sm py-8">
               No chat history yet

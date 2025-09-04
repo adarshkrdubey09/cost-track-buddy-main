@@ -24,6 +24,10 @@ const ChatContent = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [thinkingIndex, setThinkingIndex] = useState(0);
+  const [dots, setDots] = useState(1);
+
+  const thinkingIntervalRef = useRef<number | null>(null);
+  const dotsIntervalRef = useRef<number | null>(null);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -32,19 +36,10 @@ const ChatContent = () => {
     }
   }, [navigate]);
 
-  // Scroll to bottom whenever messages change
+  // Scroll to bottom whenever messages or thinking index change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [currentSession?.messages]);
-
-  // Cycle through thinking messages while loading
-  useEffect(() => {
-    if (!isLoading) return;
-    const interval = setInterval(() => {
-      setThinkingIndex((prev) => (prev + 1) % thinkingMessages.length);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [isLoading]);
+  }, [currentSession?.messages, thinkingIndex, dots]);
 
   // Fetch messages when a conversation is selected
   useEffect(() => {
@@ -65,13 +60,10 @@ const ChatContent = () => {
           }
         );
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
         const data = await response.json();
 
-        // Map API messages to local format and set
         setMessages(
           data.map((msg: any) => ({
             id: msg.id,
@@ -81,7 +73,7 @@ const ChatContent = () => {
           }))
         );
       } catch (error) {
-        console.error("Failed to fetch conversation messages:", error);
+        console.error("Failed to fetch messages:", error);
       } finally {
         setIsLoading(false);
         setThinkingIndex(0);
@@ -91,17 +83,51 @@ const ChatContent = () => {
     fetchMessages();
   }, [currentSession, setMessages]);
 
+  // Start thinking
+  const startThinking = () => {
+    setThinkingIndex(0);
+    setDots(1);
+    setIsLoading(true);
+
+    if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
+    thinkingIntervalRef.current = window.setInterval(() => {
+      setThinkingIndex(prev => (prev + 1) % thinkingMessages.length);
+    }, 4000);
+
+    if (dotsIntervalRef.current) clearInterval(dotsIntervalRef.current);
+    dotsIntervalRef.current = window.setInterval(() => {
+      setDots(prev => (prev >= 3 ? 1 : prev + 1));
+    }, 500);
+  };
+
+  // Stop thinking
+  const stopThinking = () => {
+    if (thinkingIntervalRef.current) {
+      clearInterval(thinkingIntervalRef.current);
+      thinkingIntervalRef.current = null;
+    }
+    if (dotsIntervalRef.current) {
+      clearInterval(dotsIntervalRef.current);
+      dotsIntervalRef.current = null;
+    }
+    setIsLoading(false);
+    setThinkingIndex(0);
+    setDots(1);
+  };
+
+  // Handle sending message
   const handleSendMessage = async (message: string, file?: File) => {
     if (!currentSession) return;
 
-    // Add user message locally
+    // Add user message immediately
     addMessage({
       role: "user",
       content: message,
       attachments: file ? [file] : undefined,
     });
 
-    setIsLoading(true);
+    startThinking(); // show thinking messages
+
     try {
       const response = await chatApi.sendMessage(message, currentSession.id);
 
@@ -116,31 +142,35 @@ const ChatContent = () => {
         content: "I'm sorry, I encountered an error. Please try again.",
       });
     } finally {
-      setIsLoading(false);
-      setThinkingIndex(0);
+      stopThinking(); // stop thinking messages
     }
   };
 
   return (
-    <div className="flex h-full">
-      <ChatSidebar />
+    <div className="flex h-screen flex-col md:flex-row">
+      {/* Sidebar */}
+      <div className="flex-shrink-0">
+        <ChatSidebar />
+      </div>
 
-      <div className="flex-1 flex flex-col">
+      {/* Chat Area */}
+      <div className="flex-1 flex flex-col bg-white">
         {!currentSession || currentSession.messages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <WelcomeHeader />
           </div>
         ) : (
-          <ScrollArea className="flex-1">
-            <div className="max-w-4xl mx-auto">
+          <ScrollArea className="flex-1 p-4">
+            <div className="max-w-4xl mx-auto space-y-2">
               {currentSession.messages.map((message) => (
                 <ChatMessage key={message.id} message={message} />
               ))}
 
               {isLoading && (
-                <div className="flex justify-start p-4">
-                  <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic">
-                    {thinkingMessages[thinkingIndex]}
+                <div className="flex justify-start p-2">
+                  <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
+                    <span>{thinkingMessages[thinkingIndex]}</span>
+                    <span className="animate-blink">{'.'.repeat(dots)}</span>
                   </div>
                 </div>
               )}
@@ -150,7 +180,8 @@ const ChatContent = () => {
           </ScrollArea>
         )}
 
-        <div className="max-w-4xl mx-auto w-full">
+        {/* Input */}
+        <div className="max-w-4xl mx-auto w-full p-2 md:p-4">
           <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
         </div>
       </div>
@@ -162,9 +193,7 @@ export default function Chat() {
   return (
     <ChatProvider>
       <Layout>
-        <div className="h-full flex flex-col">
-          <ChatContent />
-        </div>
+        <ChatContent />
       </Layout>
     </ChatProvider>
   );
