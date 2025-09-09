@@ -5,17 +5,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileUpload } from "@/components/ui/FileUpload";
-import { INDIAN_STATES } from "@/types/expense";
 import { useToast } from "@/hooks/use-toast";
+import { State } from "@/types/State";
 
 export default function AddExpense() {
   const [formData, setFormData] = useState({
     state: "",
+    stateShort: "",
     month: "",
     year: new Date().getFullYear(),
+    file: null as File | null,
   });
-  const [showTable, setShowTable] = useState(false);
+
+  const [states, setStates] = useState<State[]>([]);
+  const [showUpload, setShowUpload] = useState(false);
+  const [loadingStates, setLoadingStates] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -23,12 +27,37 @@ export default function AddExpense() {
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
   ];
-
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
-  const years = Array.from({length: 10}, (_, i) => currentYear - 9 + i);
-  
-  // Filter months to not allow future months for current year
+  const years = Array.from({ length: 10 }, (_, i) => currentYear - 9 + i);
+
+  // ✅ Get states from API
+  useEffect(() => {
+    const fetchStates = async () => {
+      try {
+        const token = localStorage.getItem("access_token");
+        const res = await fetch("https://ai.rosmerta.dev/expense/api/states/", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok) throw new Error("Failed to fetch states");
+
+        const data: State[] = await res.json();
+        setStates(data);
+      } catch (err: any) {
+        toast({
+          title: "Error",
+          description: err.message || "Could not load states",
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingStates(false);
+      }
+    };
+
+    fetchStates();
+  }, [toast]);
+
   const getAvailableMonths = () => {
     if (formData.year === currentYear) {
       return months.slice(0, currentMonth + 1);
@@ -36,16 +65,77 @@ export default function AddExpense() {
     return months;
   };
 
-  useEffect(() => {
-    // Check if user is authenticated
-    if (!localStorage.getItem("isAuthenticated")) {
-      navigate("/login");
+  const handleSelectChange = (name: string, value: string | number) => {
+    if (name === "state") {
+      const selected = states.find((s) => s.name === value);
+      setFormData((prev) => ({
+        ...prev,
+        state: selected?.name || "",
+        stateShort: selected?.short_name || "",
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFormData((prev) => ({ ...prev, file: e.target.files![0] }));
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!formData.state || !formData.month || !formData.year || !formData.file) {
+      toast({
+        title: "Validation Error",
+        description: "Please select state, month, year and upload file",
+        variant: "destructive",
+      });
       return;
     }
-  }, [navigate]);
+
+    try {
+      const token = localStorage.getItem("access_token");
+      const uploadData = new FormData();
+
+      // Convert month to two-digit format
+      const monthIndex = months.indexOf(formData.month) + 1;
+      const formattedMonth = monthIndex.toString().padStart(2, "0");
+
+      uploadData.append("state", formData.stateShort);
+      uploadData.append("month", formattedMonth);
+      uploadData.append("year", formData.year.toString());
+      uploadData.append("file", formData.file);
+
+      const res = await fetch("https://ai.rosmerta.dev/expense/api/ingest/analyze", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: uploadData,
+      });
+
+      if (!res.ok) throw new Error("Upload failed");
+
+      toast({
+        title: "Success",
+        description: "File uploaded successfully",
+      });
+
+      navigate("/home");
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "File upload failed",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleProceed = () => {
-    // Validate required fields
     if (!formData.state || !formData.month) {
       toast({
         title: "Validation Error",
@@ -54,40 +144,38 @@ export default function AddExpense() {
       });
       return;
     }
-    
-    setShowTable(true);
+    setShowUpload(true);
   };
 
-  const handleSelectChange = (name: string, value: string | number) => {
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  if (showTable) {
+  if (showUpload) {
     return (
       <Layout>
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="mb-6 lg:mb-8">
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Add Expense Data</h1>
-            <p className="text-sm sm:text-base text-muted-foreground">Upload your expense data for {formData.state} - {formData.month} {formData.year}</p>
-          </div>
+        <div className="max-w-2xl mx-auto p-4">
+          <h1 className="text-2xl font-bold mb-4">Upload Expense Data</h1>
+          <p className="mb-6 text-muted-foreground">
+            Upload your expense data for {formData.state} - {formData.month} {formData.year}
+          </p>
 
           <Card>
             <CardHeader>
-              <CardTitle>Upload Expense Data</CardTitle>
-              <CardDescription>
-                Upload your expense data using the predefined Excel template.
-              </CardDescription>
+              <CardTitle>Upload File</CardTitle>
+              <CardDescription>Upload the Excel file in the correct format.</CardDescription>
             </CardHeader>
             <CardContent>
-              <FileUpload 
-                selectedState={formData.state}
-                selectedMonth={formData.month}
-                selectedYear={formData.year}
-                onBack={() => setShowTable(false)}
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFileChange}
+                className="mb-4"
               />
+              <div className="flex gap-4">
+                <Button onClick={handleUpload} disabled={!formData.file}>
+                  Upload
+                </Button>
+                <Button variant="outline" onClick={() => setShowUpload(false)}>
+                  Back
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -97,84 +185,75 @@ export default function AddExpense() {
 
   return (
     <Layout>
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-6 lg:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Add New Expense</h1>
-          <p className="text-sm sm:text-base text-muted-foreground">Select period details to add expense data</p>
-        </div>
+      <div className="max-w-2xl mx-auto p-4">
+        <h1 className="text-2xl font-bold mb-4">Add New Expense</h1>
+        <p className="mb-6 text-muted-foreground">
+          Select period details to add expense data
+        </p>
 
         <Card>
           <CardHeader>
             <CardTitle>Period Selection</CardTitle>
-            <CardDescription>
-              Choose the state and date for your expense data
-            </CardDescription>
+            <CardDescription>Select state, month and year</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="state">State</Label>
-                  <Select onValueChange={(value) => handleSelectChange("state", value)} value={formData.state}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select state" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INDIAN_STATES.map((state) => (
-                        <SelectItem key={state} value={state}>
-                          {state}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="month">Month</Label>
-                  <Select onValueChange={(value) => handleSelectChange("month", value)} value={formData.month}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select month" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getAvailableMonths().map((month) => (
-                        <SelectItem key={month} value={month}>
-                          {month}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2 sm:col-span-2 lg:col-span-1">
-                  <Label htmlFor="year">Year</Label>
-                  <Select onValueChange={(value) => handleSelectChange("year", parseInt(value))} value={formData.year.toString()}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select year" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {years.map((year) => (
-                        <SelectItem key={year} value={year.toString()}>
-                          {year}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+              <div>
+                <Label>State</Label>
+                <Select onValueChange={(val) => handleSelectChange("state", val)} value={formData.state}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingStates ? "Loading..." : "Select state"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {states.map((s) => (
+                      <SelectItem key={s.id} value={s.name}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                <Button onClick={handleProceed} className="flex-1">
-                  Proceed to Add Expenses
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => navigate("/home")}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
+              <div>
+                <Label>Month</Label>
+                <Select onValueChange={(val) => handleSelectChange("month", val)} value={formData.month}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getAvailableMonths().map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+
+              <div>
+                <Label>Year</Label>
+                <Select onValueChange={(val) => handleSelectChange("year", parseInt(val))} value={formData.year.toString()}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map((y) => (
+                      <SelectItem key={y} value={y.toString()}>
+                        {y}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <Button onClick={handleProceed} className="flex-1">
+                Proceed to Upload
+              </Button>
+              <Button variant="outline" onClick={() => navigate("/home")} className="flex-1">
+                Cancel
+              </Button>
             </div>
           </CardContent>
         </Card>
