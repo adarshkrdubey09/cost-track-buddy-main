@@ -21,7 +21,8 @@ const ChatContent = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);   // for fetching
+  const [isThinking, setIsThinking] = useState(false); // for assistant typing
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const [dots, setDots] = useState(1);
 
@@ -86,7 +87,7 @@ const ChatContent = () => {
   const startThinking = () => {
     setThinkingIndex(0);
     setDots(1);
-    setIsLoading(true);
+    setIsThinking(true);
 
     if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
     thinkingIntervalRef.current = window.setInterval(() => {
@@ -109,7 +110,7 @@ const ChatContent = () => {
       clearInterval(dotsIntervalRef.current);
       dotsIntervalRef.current = null;
     }
-    setIsLoading(false);
+    setIsThinking(false);
     setThinkingIndex(0);
     setDots(1);
   };
@@ -153,44 +154,41 @@ const ChatContent = () => {
       </div>
 
       {/* Chat Area */}
-     {/* Chat Area */}
-<div className="flex-1 flex flex-col bg-white">
-  {/* Messages */}
-  <div className="flex-1 overflow-y-auto p-4 pb-28"> 
-    {/* 👆 Added pb-28 so messages don't hide behind input */}
+      <div className="flex-1 flex flex-col bg-white">
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 pb-28"> 
+          {/* 👆 Added pb-28 so messages don't hide behind input */}
 
-    {!currentSession || currentSession.messages.length === 0 ? (
-      <div className="flex h-full items-center justify-center">
-        <WelcomeHeader />
-      </div>
-    ) : (
-      <div className="max-w-4xl mx-auto space-y-2">
-        {currentSession.messages.map((message) => (
-          <ChatMessage key={message.id} message={message} />
-        ))}
-
-        {isLoading && (
-          <div className="flex justify-start p-2">
-            <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
-              <span>{thinkingMessages[thinkingIndex]}</span>
-              <span className="animate-blink">{'.'.repeat(dots)}</span>
+          {!currentSession || currentSession.messages.length === 0 ? (
+            <div className="flex h-full items-center justify-center">
+              <WelcomeHeader />
             </div>
+          ) : (
+            <div className="max-w-4xl mx-auto space-y-2">
+              {currentSession.messages.map((message) => (
+                <ChatMessage key={message.id} message={message} />
+              ))}
+
+              {isThinking && (
+                <div className="flex justify-start p-2">
+                  <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
+                    <span>{thinkingMessages[thinkingIndex]}</span>
+                    <span className="animate-blink">{'.'.repeat(dots)}</span>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </div>
+
+        {/* Input */}
+        <div className="sticky bottom-20 bg-white border-t p-2 md:p-4">
+          <div className="max-w-4xl mx-auto w-full">
+            <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
           </div>
-        )}
-        <div ref={messagesEndRef} />
+        </div>
       </div>
-    )}
-  </div>
-
-  {/* Input */}
-  <div className="sticky bottom-20 bg-white border-t p-2 md:p-4">
-    {/* 👆 changed bottom-20 → bottom-0 */}
-    <div className="max-w-4xl mx-auto w-full">
-      <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
-    </div>
-  </div>
-</div>
-
     </div>
   );
 };

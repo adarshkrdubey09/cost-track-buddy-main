@@ -88,7 +88,7 @@ export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
   };
 
   return (
-    <div className="border-t bg-background p-4">
+    <div className=" bg-background p-4 border-[0.50px] border-gray-300 rounded-lg">
       <form onSubmit={handleSubmit} className="space-y-3">
         {selectedFile && (
           <div className="flex items-center gap-2 p-2 bg-muted rounded">
@@ -104,12 +104,12 @@ export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
           </div>
         )}
         
-        <div className="flex gap-2">
+        <div className="flex gap-2 ">
           <div className="flex-1 relative">
             <Input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Type your message... demo"
+              placeholder="Type your message... "
               disabled={isLoading}
             />
             

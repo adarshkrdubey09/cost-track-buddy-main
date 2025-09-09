@@ -156,62 +156,117 @@ export const ChatProvider = ({ children }: ChatProviderProps) => {
   };
 
   // Add a new message locally
-  const addMessage = (message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
-    setCurrentSession(prev => {
-      if (!prev) return null;
+// Add a new message locally
+const addMessage = (
+  message: Omit<ChatMessage, "id" | "timestamp"> & { id?: string }
+) => {
+  setCurrentSession(prev => {
+    if (!prev) return null;
 
-      const newMessage: ChatMessage = {
-        ...message,
-        id: Date.now().toString(),
-        timestamp: new Date(),
-      };
+    const newMessage: ChatMessage = {
+      ...message,
+      id: message.id ?? Date.now().toString(), // support custom ID
+      timestamp: new Date(),
+    };
 
-      const updatedSession: ChatSession = {
-        ...prev,
-        messages: [...prev.messages, newMessage],
-        updatedAt: new Date(),
-        title:
-          prev.messages.length === 0 && message.role === 'user'
-            ? message.content.slice(0, 50) + (message.content.length > 50 ? '...' : '')
-            : prev.title,
-      };
+    const updatedSession: ChatSession = {
+      ...prev,
+      messages: [...prev.messages, newMessage],
+      updatedAt: new Date(),
+      title:
+        prev.messages.length === 0 && message.role === "user"
+          ? message.content.slice(0, 50) + (message.content.length > 50 ? "..." : "")
+          : prev.title,
+    };
 
-      setSessions(prevSessions =>
-        prevSessions.map(s => (s.id === updatedSession.id ? updatedSession : s))
-      );
+    setSessions(prevSessions =>
+      prevSessions.map(s => (s.id === updatedSession.id ? updatedSession : s))
+    );
 
-      return updatedSession;
-    });
-  };
+    return updatedSession;
+  });
+};
+
+const updateMessage = (id: string, updated: Partial<ChatMessage>) => {
+  setCurrentSession(prev =>
+    prev
+      ? {
+          ...prev,
+          messages: prev.messages.map(m =>
+            m.id === id ? { ...m, ...updated } : m
+          ),
+          updatedAt: new Date(),
+        }
+      : prev
+  );
+};
+
 
   // Send message via API and update local state
-  const sendMessage = async (message: string, file?: File) => {
-    if (!currentSession) return;
+  // Send message via API and update local state
+const sendMessage = async (message: string, file?: File) => {
+  if (!currentSession) return;
 
-    addMessage({
-      role: "user",
-      content: message,
-      attachments: file ? [file] : undefined,
+  // Add user message
+  addMessage({
+    role: "user",
+    content: message,
+    attachments: file ? [file] : undefined,
+  });
+
+  // Add temporary assistant "thinking" message
+  const thinkingId = Date.now().toString();
+  addMessage({
+    role: "assistant",
+    content: "__thinking__",
+  });
+
+  try {
+    const response = await chatApi.sendMessage(message, currentSession.id);
+
+    // Replace thinking message with actual response
+    setCurrentSession(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        messages: prev.messages.map(m =>
+          m.content === "__thinking__"
+            ? { ...m, content: response.message }
+            : m
+        ),
+      };
     });
 
-    setIsLoading(true);
+    setSessions(prev =>
+      prev.map(s =>
+        s.id === currentSession.id
+          ? {
+              ...s,
+              messages: s.messages.map(m =>
+                m.content === "__thinking__"
+                  ? { ...m, content: response.message }
+                  : m
+              ),
+            }
+          : s
+      )
+    );
+  } catch (error) {
+    // Replace with error
+    setCurrentSession(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        messages: prev.messages.map(m =>
+          m.content === "__thinking__"
+            ? { ...m, content: "I'm sorry, I encountered an error. Please try again." }
+            : m
+        ),
+      };
+    });
+  }
+};
 
-    try {
-      const response = await chatApi.sendMessage(message, currentSession.id);
-
-      addMessage({
-        role: "assistant",
-        content: response.message,
-      });
-    } catch (error) {
-      addMessage({
-        role: "assistant",
-        content: "I'm sorry, I encountered an error. Please try again.",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // ✅ Rename a session
   const renameSession = async (sessionId: string, newTitle: string) => {
