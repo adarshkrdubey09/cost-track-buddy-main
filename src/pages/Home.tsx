@@ -66,13 +66,7 @@ export default function Home() {
 
           <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => {
             // For now, we'll show a simple list. Later we can create a dedicated view page
-            if (expenses.length === 0) {
-              toast({
-                title: "No expenses found",
-                description: "Add some expenses first to view and edit them.",
-              });
-              return;
-            }
+            
             // Navigate to view expenses page
             navigate("/view-expenses");
           }}>

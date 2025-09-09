@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { State } from "@/types/State";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 
 export default function AddExpense() {
   const [formData, setFormData] = useState({
@@ -16,10 +18,11 @@ export default function AddExpense() {
     year: new Date().getFullYear(),
     file: null as File | null,
   });
-
   const [states, setStates] = useState<State[]>([]);
   const [showUpload, setShowUpload] = useState(false);
   const [loadingStates, setLoadingStates] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -29,9 +32,17 @@ export default function AddExpense() {
   ];
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
-  const years = Array.from({ length: 10 }, (_, i) => currentYear - 9 + i);
+  const years = Array.from({ length: 30 }, (_, i) => currentYear - 9 + i);
 
-  // ✅ Get states from API
+  // Check authentication
+  useEffect(() => {
+    if (!localStorage.getItem("isAuthenticated")) {
+      navigate("/login");
+      return;
+    }
+  }, [navigate]);
+
+  // Fetch states from API
   useEffect(() => {
     const fetchStates = async () => {
       try {
@@ -80,10 +91,22 @@ export default function AddExpense() {
       }));
     }
   };
-
+   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFormData((prev) => ({ ...prev, file: e.target.files![0] }));
+      const file = e.target.files[0];
+      
+      // Validate file type
+      if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+        toast({
+          title: "Invalid File Type",
+          description: "Please upload an Excel file (.xlsx or .xls)",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      setFormData((prev) => ({ ...prev, file }));
     }
   };
 
@@ -98,6 +121,9 @@ export default function AddExpense() {
     }
 
     try {
+      setUploading(true);
+      setUploadProgress(30);
+      
       const token = localStorage.getItem("access_token");
       const uploadData = new FormData();
 
@@ -110,6 +136,8 @@ export default function AddExpense() {
       uploadData.append("year", formData.year.toString());
       uploadData.append("file", formData.file);
 
+      setUploadProgress(60);
+      
       const res = await fetch("https://ai.rosmerta.dev/expense/api/ingest/analyze", {
         method: "POST",
         headers: {
@@ -118,15 +146,25 @@ export default function AddExpense() {
         body: uploadData,
       });
 
-      if (!res.ok) throw new Error("Upload failed");
+      setUploadProgress(90);
 
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Upload failed");
+      }
+
+      setUploadProgress(100);
+      
       toast({
         title: "Success",
         description: "File uploaded successfully",
       });
 
-      navigate("/home");
+      // Navigate after a brief delay to show success
+      setTimeout(() => navigate("/home"), 1000);
     } catch (err: any) {
+      setUploading(false);
+      setUploadProgress(0);
       toast({
         title: "Error",
         description: err.message || "File upload failed",
@@ -136,7 +174,7 @@ export default function AddExpense() {
   };
 
   const handleProceed = () => {
-    if (!formData.state || !formData.month) {
+    if (!formData.state || !formData.month || !formData.year) {
       toast({
         title: "Validation Error",
         description: "Please select state, month and year",
@@ -150,30 +188,58 @@ export default function AddExpense() {
   if (showUpload) {
     return (
       <Layout>
-        <div className="max-w-2xl mx-auto p-4">
-          <h1 className="text-2xl font-bold mb-4">Upload Expense Data</h1>
-          <p className="mb-6 text-muted-foreground">
-            Upload your expense data for {formData.state} - {formData.month} {formData.year}
-          </p>
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-6 lg:mb-8">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Upload Expense Data</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              Upload your expense data for {formData.state} - {formData.month} {formData.year}
+            </p>
+          </div>
 
           <Card>
             <CardHeader>
               <CardTitle>Upload File</CardTitle>
-              <CardDescription>Upload the Excel file in the correct format.</CardDescription>
+              <CardDescription>
+                Upload your expense data using the predefined Excel template.
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleFileChange}
-                className="mb-4"
-              />
-              <div className="flex gap-4">
-                <Button onClick={handleUpload} disabled={!formData.file}>
-                  Upload
+            <CardContent className="space-y-6">
+              <div className="grid w-full max-w-sm items-center gap-1.5">
+                <Label htmlFor="file">Excel File</Label>
+                <Input 
+                  id="file" 
+                  type="file" 
+                  accept=".xlsx,.xls"
+                  onChange={handleFileChange}
+                  disabled={uploading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Supported formats: .xlsx, .xls
+                </p>
+              </div>
+              
+              {uploading && (
+                <div className="space-y-2">
+                  <Label>Uploading... {uploadProgress}%</Label>
+                  <Progress value={uploadProgress} className="w-full" />
+                </div>
+              )}
+              
+              <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                <Button 
+                  onClick={handleUpload} 
+                  disabled={!formData.file || uploading}
+                  className="flex-1"
+                >
+                  {uploading ? "Uploading..." : "Upload File"}
                 </Button>
-                <Button variant="outline" onClick={() => setShowUpload(false)}>
-                  Back
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowUpload(false)}
+                  disabled={uploading}
+                  className="flex-1"
+                >
+                  Back to Selection
                 </Button>
               </div>
             </CardContent>
@@ -185,75 +251,100 @@ export default function AddExpense() {
 
   return (
     <Layout>
-      <div className="max-w-2xl mx-auto p-4">
-        <h1 className="text-2xl font-bold mb-4">Add New Expense</h1>
-        <p className="mb-6 text-muted-foreground">
-          Select period details to add expense data
-        </p>
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-6 lg:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Add New Expense</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Select period details to add expense data
+          </p>
+        </div>
 
         <Card>
           <CardHeader>
             <CardTitle>Period Selection</CardTitle>
-            <CardDescription>Select state, month and year</CardDescription>
+            <CardDescription>
+              Choose the state and date for your expense data
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              <div>
-                <Label>State</Label>
-                <Select onValueChange={(val) => handleSelectChange("state", val)} value={formData.state}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={loadingStates ? "Loading..." : "Select state"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {states.map((s) => (
-                      <SelectItem key={s.id} value={s.name}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="state">State</Label>
+                  <Select 
+                    onValueChange={(value) => handleSelectChange("state", value)} 
+                    value={formData.state}
+                    disabled={loadingStates}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={loadingStates ? "Loading states..." : "Select state"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {states.map((state) => (
+                        <SelectItem key={state.id} value={state.name}>
+                          {state.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="month">Month</Label>
+                  <Select 
+                    onValueChange={(value) => handleSelectChange("month", value)} 
+                    value={formData.month}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getAvailableMonths().map((month) => (
+                        <SelectItem key={month} value={month}>
+                          {month}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2 sm:col-span-2 lg:col-span-1">
+                  <Label htmlFor="year">Year</Label>
+                  <Select 
+                    onValueChange={(value) => handleSelectChange("year", parseInt(value))} 
+                    value={formData.year.toString()}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {years.map((year) => (
+                        <SelectItem key={year} value={year.toString()}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
-              <div>
-                <Label>Month</Label>
-                <Select onValueChange={(val) => handleSelectChange("month", val)} value={formData.month}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select month" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getAvailableMonths().map((m) => (
-                      <SelectItem key={m} value={m}>
-                        {m}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                <Button 
+                  onClick={handleProceed} 
+                  className="flex-1"
+                  disabled={loadingStates}
+                >
+                  Proceed to Upload
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => navigate("/home")}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
               </div>
-
-              <div>
-                <Label>Year</Label>
-                <Select onValueChange={(val) => handleSelectChange("year", parseInt(val))} value={formData.year.toString()}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select year" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {years.map((y) => (
-                      <SelectItem key={y} value={y.toString()}>
-                        {y}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <Button onClick={handleProceed} className="flex-1">
-                Proceed to Upload
-              </Button>
-              <Button variant="outline" onClick={() => navigate("/home")} className="flex-1">
-                Cancel
-              </Button>
             </div>
           </CardContent>
         </Card>

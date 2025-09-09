@@ -6,7 +6,6 @@ import { ChatSidebar } from '@/components/ChatSidebar';
 import { ChatMessage } from '@/components/ChatMessage';
 import { ChatInput } from '@/components/ChatInput';
 import { WelcomeHeader } from '@/components/WelcomeHeader';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { chatApi } from '@/utils/chatApi';
 
 const thinkingMessages = [
@@ -149,42 +148,49 @@ const ChatContent = () => {
   return (
     <div className="flex h-screen flex-col md:flex-row">
       {/* Sidebar */}
-      <div className="flex-shrink-0">
+      <div className="flex-shrink-0 w-full md:w-64 border-r">
         <ChatSidebar />
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col bg-white">
-        {!currentSession || currentSession.messages.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center">
-            <WelcomeHeader />
-          </div>
-        ) : (
-          <ScrollArea className="flex-1 p-4">
-            <div className="max-w-4xl mx-auto space-y-2">
-              {currentSession.messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
-              ))}
+     {/* Chat Area */}
+<div className="flex-1 flex flex-col bg-white">
+  {/* Messages */}
+  <div className="flex-1 overflow-y-auto p-4 pb-28"> 
+    {/* 👆 Added pb-28 so messages don't hide behind input */}
 
-              {isLoading && (
-                <div className="flex justify-start p-2">
-                  <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
-                    <span>{thinkingMessages[thinkingIndex]}</span>
-                    <span className="animate-blink">{'.'.repeat(dots)}</span>
-                  </div>
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>
-          </ScrollArea>
-        )}
-
-        {/* Input */}
-        <div className="max-w-4xl mx-auto w-full p-2 md:p-4">
-          <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
-        </div>
+    {!currentSession || currentSession.messages.length === 0 ? (
+      <div className="flex h-full items-center justify-center">
+        <WelcomeHeader />
       </div>
+    ) : (
+      <div className="max-w-4xl mx-auto space-y-2">
+        {currentSession.messages.map((message) => (
+          <ChatMessage key={message.id} message={message} />
+        ))}
+
+        {isLoading && (
+          <div className="flex justify-start p-2">
+            <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
+              <span>{thinkingMessages[thinkingIndex]}</span>
+              <span className="animate-blink">{'.'.repeat(dots)}</span>
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+    )}
+  </div>
+
+  {/* Input */}
+  <div className="sticky bottom-20 bg-white border-t p-2 md:p-4">
+    {/* 👆 changed bottom-20 → bottom-0 */}
+    <div className="max-w-4xl mx-auto w-full">
+      <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+    </div>
+  </div>
+</div>
+
     </div>
   );
 };
