@@ -21,16 +21,19 @@ export const ChatProvider = ({ children }: ChatProviderProps) => {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  const API_BASE = "https://ai.rosmerta.dev/expense/api/chat/conversations";
+  const TOKEN = localStorage.getItem("access_token");
+
   // Load all chat sessions
   useEffect(() => {
     const fetchSessions = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch("https://ai.rosmerta.dev/expense/api/chat/conversations", {
+        const res = await fetch(API_BASE, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("access_token")}`,
+            "Authorization": `Bearer ${TOKEN}`,
           },
         });
 
@@ -60,11 +63,11 @@ export const ChatProvider = ({ children }: ChatProviderProps) => {
   // Create a new chat session
   const createNewSession = async () => {
     try {
-      const res = await fetch("https://ai.rosmerta.dev/expense/api/chat/conversations", {
+      const res = await fetch(API_BASE, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("access_token")}`,
+          "Authorization": `Bearer ${TOKEN}`,
         },
         body: JSON.stringify({ title: "New Chat" }),
       });
@@ -89,56 +92,49 @@ export const ChatProvider = ({ children }: ChatProviderProps) => {
 
   // Load a session and fetch its messages
   const loadSession = async (sessionId: string) => {
-  setIsLoading(true);
+    setIsLoading(true);
 
-  try {
-    // Fetch session with messages
-    const res = await fetch(
-      `https://ai.rosmerta.dev/expense/api/chat/conversations/${sessionId}`,
-      {
+    try {
+      const res = await fetch(`${API_BASE}/${sessionId}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("access_token")}`,
+          "Authorization": `Bearer ${TOKEN}`,
         },
-      }
-    );
+      });
 
-    if (!res.ok) throw new Error("Failed to fetch conversation");
+      if (!res.ok) throw new Error("Failed to fetch conversation");
 
-    const sessionData = await res.json();
+      const sessionData = await res.json();
 
-    // Map messages to ChatMessage format
-    const messages: ChatMessage[] = sessionData.messages.map((m: any) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      timestamp: new Date(m.created_at),
-      attachments: m.attachments || [],
-    }));
+      const messages: ChatMessage[] = sessionData.messages.map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: new Date(m.created_at),
+        attachments: m.attachments || [],
+      }));
 
-    const loadedSession: ChatSession = {
-      id: sessionData.id,
-      title: sessionData.title,
-      messages,
-      createdAt: new Date(sessionData.created_at),
-      updatedAt: new Date(sessionData.updated_at),
-    };
+      const loadedSession: ChatSession = {
+        id: sessionData.id,
+        title: sessionData.title,
+        messages,
+        createdAt: new Date(sessionData.created_at),
+        updatedAt: new Date(sessionData.updated_at),
+      };
 
-    setCurrentSession(loadedSession);
+      setCurrentSession(loadedSession);
 
-    // Update sessions list if needed
-    setSessions(prev =>
-      prev.map(s => (s.id === loadedSession.id ? loadedSession : s))
-    );
+      setSessions(prev =>
+        prev.map(s => (s.id === loadedSession.id ? loadedSession : s))
+      );
 
-  } catch (error) {
-    console.error("Error loading session:", error);
-  } finally {
-    setIsLoading(false);
-  }
-};
-
+    } catch (error) {
+      console.error("Error loading session:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Replace all messages for current session
   const setMessages = (messages: ChatMessage[]) => {
@@ -217,6 +213,58 @@ export const ChatProvider = ({ children }: ChatProviderProps) => {
     }
   };
 
+  // ✅ Rename a session
+  const renameSession = async (sessionId: string, newTitle: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/${sessionId}/rename`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${TOKEN}`,
+        },
+        body: JSON.stringify({ title: newTitle }),
+      });
+
+      if (!res.ok) throw new Error("Failed to rename session");
+
+      setSessions(prev =>
+        prev.map(s =>
+          s.id === sessionId ? { ...s, title: newTitle, updatedAt: new Date() } : s
+        )
+      );
+
+      if (currentSession?.id === sessionId) {
+        setCurrentSession(prev =>
+          prev ? { ...prev, title: newTitle, updatedAt: new Date() } : prev
+        );
+      }
+    } catch (err) {
+      console.error("Rename error:", err);
+    }
+  };
+
+  // ✅ Delete a session
+  const deleteSession = async (sessionId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/${sessionId}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${TOKEN}`,
+        },
+      });
+
+      if (!res.ok) throw new Error("Failed to delete session");
+
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+
+      if (currentSession?.id === sessionId) {
+        setCurrentSession(null);
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+    }
+  };
+
   return (
     <ChatContext.Provider
       value={{
@@ -227,6 +275,8 @@ export const ChatProvider = ({ children }: ChatProviderProps) => {
         addMessage,
         setMessages,
         sendMessage,
+        renameSession,  // ✅ expose rename
+        deleteSession,  // ✅ expose delete
         isLoading,
       }}
     >

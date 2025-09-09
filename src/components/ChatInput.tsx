@@ -109,7 +109,7 @@ export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
             <Input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Type your message..."
+              placeholder="Type your message... demo"
               disabled={isLoading}
             />
             

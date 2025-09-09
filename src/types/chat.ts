@@ -17,9 +17,11 @@ export interface ChatContextType {
   currentSession: ChatSession | null;
   sessions: ChatSession[];
   createNewSession: () => Promise<void>;
-  loadSession: (sessionId: string) => void;
+  loadSession: (sessionId: string) => Promise<void>;
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  setMessages: (messages: ChatMessage[]) => void;
   sendMessage: (message: string, file?: File) => Promise<void>;
-  setMessages: (messages: ChatMessage[]) => void; // <-- add this
+  renameSession: (sessionId: string, newTitle: string) => Promise<void>;  // ✅ add
+  deleteSession: (sessionId: string) => Promise<void>;                   // ✅ add
   isLoading: boolean;
 }
