@@ -116,35 +116,38 @@ const ChatContent = () => {
   };
 
   // Handle sending message
-  const handleSendMessage = async (message: string, file?: File) => {
-    if (!currentSession) return;
+  // ChatContent.tsx
+const handleSendMessage = async (message: string, file?: File, sessionId?: string) => {
+  const id = sessionId || currentSession?.id;
+  if (!id) return;
 
-    // Add user message immediately
+  // Add user message immediately
+  addMessage({
+    role: "user",
+    content: message,
+    attachments: file ? [file] : undefined,
+  });
+
+  startThinking(); // show thinking messages
+
+  try {
+    const response = await chatApi.sendMessage(message, id);
+
+    // Add assistant reply
     addMessage({
-      role: "user",
-      content: message,
-      attachments: file ? [file] : undefined,
+      role: "assistant",
+      content: response.message,
     });
+  } catch (error) {
+    addMessage({
+      role: "assistant",
+      content: "I'm sorry, I encountered an error. Please try again.",
+    });
+  } finally {
+    stopThinking(); // stop thinking messages
+  }
+};
 
-    startThinking(); // show thinking messages
-
-    try {
-      const response = await chatApi.sendMessage(message, currentSession.id);
-
-      // Add assistant reply
-      addMessage({
-        role: "assistant",
-        content: response.message,
-      });
-    } catch (error) {
-      addMessage({
-        role: "assistant",
-        content: "I'm sorry, I encountered an error. Please try again.",
-      });
-    } finally {
-      stopThinking(); // stop thinking messages
-    }
-  };
 
   return (
     <div className="flex h-screen flex-col md:flex-row">

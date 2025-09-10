@@ -7,9 +7,10 @@ import { useToast } from '@/hooks/use-toast';
 import { useChatContext } from '@/contexts/ChatContext'; // ✅ added
 
 interface ChatInputProps {
-  onSendMessage: (message: string, file?: File) => void;
+  onSendMessage: (message: string, file?: File, sessionId?: string) => void;
   isLoading: boolean;
 }
+
 
 export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
   const [message, setMessage] = useState('');
@@ -22,26 +23,28 @@ export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
   const { currentSession, createNewSession, setCurrentSession } = useChatContext();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (message.trim() || selectedFile) {
-      let session = currentSession;
+  e.preventDefault();
+  if (!message.trim() && !selectedFile) return;
 
-      // ✅ if no session, create one before sending
-      if (!session) {
-        session = await createNewSession();
+  let session = currentSession;
 
-
-        if (session) setCurrentSession(session);
-        onSendMessage(message.trim(), selectedFile || undefined);
-      setMessage('');
-      setSelectedFile(null);
-      }
-
-      onSendMessage(message.trim(), selectedFile || undefined);
-      setMessage('');
-      setSelectedFile(null);
+  // ✅ create session if none exists
+  if (!session) {
+    session = await createNewSession();
+    if (session) {
+      setCurrentSession(session);
+    } else {
+      return; // stop if session couldn’t be created
     }
-  };
+  }
+
+  // ✅ always send with session.id
+  onSendMessage(message.trim(), selectedFile || undefined, session.id);
+
+  setMessage('');
+  setSelectedFile(null);
+};
+
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

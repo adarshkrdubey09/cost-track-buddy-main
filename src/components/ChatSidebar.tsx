@@ -117,94 +117,104 @@ export const ChatSidebar = () => {
         </div>
 
         {/* Scrollable Chat Sessions */}
-        <ScrollArea className="flex-1">
-          <div className="p-2 space-y-1">
-            {sessions.map((session) => (
-              <div key={session.id} className="flex items-center gap-1">
-                <Button
-                  variant={currentSession?.id === session.id ? "secondary" : "ghost"}
-                  className="flex-1 justify-start text-left h-auto p-2 sm:p-3 min-h-[60px] sm:min-h-[70px]"
-                  onClick={() => handleLoadSession(session.id)}
-                >
-                  <div className="flex items-start gap-2 w-full">
-                    <MessageSquare className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 overflow-hidden">
-                      {editingSessionId === session.id ? (
-                        <input
-                          type="text"
-                          className="w-full text-sm border rounded px-1 py-1"
-                          value={newTitle}
-                          onChange={(e) => setNewTitle(e.target.value)}
-                          onBlur={() => {
-                            renameSession(session.id, newTitle);
-                            setEditingSessionId(null);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              renameSession(session.id, newTitle);
-                              setEditingSessionId(null);
-                            }
-                          }}
-                          autoFocus
-                        />
-                      ) : (
-                        <>
-                          <div className="font-medium text-sm truncate">
-                            {session.title}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {session.updatedAt.toLocaleDateString("en-GB", {
-                              day: '2-digit',
-                              month: 'short',
-                              year: session.updatedAt.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
-                            })}
-                            {" • "}
-                            {session.updatedAt.toLocaleTimeString("en-US", {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: false
-                            })}
-                          </div>
-                        </>
-                      )}
-                    </div>
+       <ScrollArea className="flex-1">
+  <div className="p-2 space-y-1">
+    {sessions.map((session) => (
+      <div key={session.id} className="flex items-center gap-1">
+        <Button
+          variant={currentSession?.id === session.id ? "secondary" : "ghost"}
+          className="flex-1 justify-start text-left h-auto p-2 sm:p-3 min-h-[60px] sm:min-h-[70px]"
+          onClick={() => handleLoadSession(session.id)}
+        >
+          <div className="flex items-start gap-2 w-full">
+            <MessageSquare className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 overflow-hidden">
+              {editingSessionId === session.id ? (
+                <input
+                  type="text"
+                  className="w-full text-sm border rounded px-1 py-1"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  onBlur={() => {
+                    renameSession(session.id, newTitle);
+                    setEditingSessionId(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      renameSession(session.id, newTitle);
+                      setEditingSessionId(null);
+                    }
+                  }}
+                  autoFocus
+                  onClick={(e) => e.stopPropagation()} // ✅ prevent triggering Button click
+                />
+              ) : (
+                <>
+                  <div className="font-medium text-sm truncate">
+                    {session.title}
                   </div>
-                </Button>
-
-                <div className="flex flex-col gap-1">
-                  {/* Rename Button */}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8"
-                    onClick={() => {
-                      setEditingSessionId(session.id);
-                      setNewTitle(session.title);
-                    }}
-                  >
-                    <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
-                  </Button>
-
-                  {/* Delete Button */}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8"
-                    onClick={() => deleteSession(session.id)}
-                  >
-                    <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-500" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-
-            {sessions.length === 0 && (
-              <div className="text-center text-muted-foreground text-sm py-8 px-4">
-                No chat history yet. Start a new conversation!
-              </div>
-            )}
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {session.updatedAt.toLocaleDateString("en-GB", {
+                      day: "2-digit",
+                      month: "short",
+                      year:
+                        session.updatedAt.getFullYear() !==
+                        new Date().getFullYear()
+                          ? "numeric"
+                          : undefined,
+                    })}
+                    {" • "}
+                    {session.updatedAt.toLocaleTimeString("en-US", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: false,
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </ScrollArea>
+        </Button>
+
+        <div className="flex flex-col gap-1">
+          {/* Rename Button */}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation(); // ✅ prevent row click
+              setEditingSessionId(session.id);
+              setNewTitle(session.title);
+            }}
+          >
+            <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+          </Button>
+
+          {/* Delete Button */}
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation(); // ✅ prevent row click
+              deleteSession(session.id);
+            }}
+          >
+            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-500" />
+          </Button>
+        </div>
+      </div>
+    ))}
+
+    {sessions.length === 0 && (
+      <div className="text-center text-muted-foreground text-sm py-8 px-4">
+        No chat history yet. Start a new conversation!
+      </div>
+    )}
+  </div>
+</ScrollArea>
+
       </div>
     </>
   );
