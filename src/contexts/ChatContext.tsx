@@ -62,6 +62,8 @@ export const ChatProvider = ({ children }: ChatProviderProps) => {
 
   const createNewSession = async (): Promise<ChatSession | null> => {
   try {
+    
+    console.log("in a createnewsession")
     const res = await fetch(API_BASE, {
       method: "POST",
       headers: {

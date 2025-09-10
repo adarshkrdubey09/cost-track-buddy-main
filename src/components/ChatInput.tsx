@@ -29,7 +29,12 @@ export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
       // ✅ if no session, create one before sending
       if (!session) {
         session = await createNewSession();
+
+
         if (session) setCurrentSession(session);
+        onSendMessage(message.trim(), selectedFile || undefined);
+      setMessage('');
+      setSelectedFile(null);
       }
 
       onSendMessage(message.trim(), selectedFile || undefined);

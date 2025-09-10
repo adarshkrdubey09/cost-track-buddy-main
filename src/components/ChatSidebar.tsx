@@ -35,6 +35,23 @@ export const ChatSidebar = () => {
     return () => window.removeEventListener('resize', checkIsMobile);
   }, []);
 
+// useEffect(() => {
+//   const initializeSession = async () => {
+//     if (!currentSession) {
+//       if (sessions.length === 0) {
+//         // No sessions exist → create a new one
+//         const newSession = await createNewSession();
+//         if (newSession) setCurrentSession(newSession);
+//       } else {
+//         // Sessions exist → set the first one as current
+//         setCurrentSession(sessions[0]);
+//       }
+//     }
+//   };
+
+//   initializeSession();
+// }, [currentSession, sessions, createNewSession, setCurrentSession]);
+
   const handleNewChat = async () => {
     const newSession = await createNewSession();
     if (newSession) setCurrentSession(newSession);
