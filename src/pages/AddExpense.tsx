@@ -137,7 +137,7 @@ export default function AddExpense() {
       uploadData.append("file", formData.file);
 
       setUploadProgress(60);
-      
+      // debugger
       const res = await fetch("https://ai.rosmerta.dev/expense/api/ingest/analyze", {
         method: "POST",
         headers: {

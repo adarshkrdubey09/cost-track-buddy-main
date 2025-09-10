@@ -1,6 +1,8 @@
 import { LayoutDashboard, Plus, Home, MessageSquare } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import Logo from "@/components/images/RTL-LOGO 1 (1).png"
+
 import {
   Sidebar,
   SidebarContent,
@@ -47,7 +49,15 @@ export function AppSidebar() {
             className="text-lg font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent cursor-pointer hover:opacity-80"
             onClick={() => navigate("/chat")}
           >
-            ExpenseTracker
+          <div className="flex justify-start items-center">
+  <img
+    src={Logo}
+    alt="logo"
+    className="w-28 h-auto md:w-40 md:h-30 object-contain !m-0 !p-0"
+    style={{ margin: 0, padding: 0 }}
+  />
+</div>
+
           </h1>
         )}
         {isCollapsed && (

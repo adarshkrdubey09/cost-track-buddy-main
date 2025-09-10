@@ -60,40 +60,42 @@ export const ChatProvider = ({ children }: ChatProviderProps) => {
     fetchSessions();
   }, []);
 
-  // Create a new chat session
-  const createNewSession = async () => {
-    try {
-      const res = await fetch(API_BASE, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${TOKEN}`,
-        },
-        body: JSON.stringify({ title: "New Chat" }),
-      });
+  const createNewSession = async (): Promise<ChatSession | null> => {
+  try {
+    const res = await fetch(API_BASE, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({ title: "New Chat" }),
+    });
 
-      if (!res.ok) throw new Error("Failed to create session");
+    if (!res.ok) throw new Error("Failed to create session");
 
-      const data = await res.json();
-      const newSession: ChatSession = {
-        id: data.id,
-        title: data.title,
-        messages: [],
-        createdAt: new Date(data.created_at),
-        updatedAt: new Date(data.updated_at),
-      };
+    const data = await res.json();
+    const newSession: ChatSession = {
+      id: data.id,
+      title: data.title,
+      messages: [],
+      createdAt: new Date(data.created_at),
+      updatedAt: new Date(data.updated_at),
+    };
 
-      setSessions(prev => [newSession, ...prev]);
-      setCurrentSession(newSession);
-    } catch (error) {
-      console.error("Error creating session:", error);
-    }
-  };
+    setSessions(prev => [newSession, ...prev]);
+    setCurrentSession(newSession);
+
+    return newSession;
+  } catch (error) {
+    console.error("Error creating session:", error);
+    return null;
+  }
+};
+
 
   // Load a session and fetch its messages
   const loadSession = async (sessionId: string) => {
     setIsLoading(true);
-
     try {
       const res = await fetch(`${API_BASE}/${sessionId}`, {
         method: "GET",
@@ -124,11 +126,7 @@ export const ChatProvider = ({ children }: ChatProviderProps) => {
       };
 
       setCurrentSession(loadedSession);
-
-      setSessions(prev =>
-        prev.map(s => (s.id === loadedSession.id ? loadedSession : s))
-      );
-
+      setSessions(prev => prev.map(s => (s.id === loadedSession.id ? loadedSession : s)));
     } catch (error) {
       console.error("Error loading session:", error);
     } finally {
@@ -140,43 +138,31 @@ export const ChatProvider = ({ children }: ChatProviderProps) => {
   const setMessages = (messages: ChatMessage[]) => {
     setCurrentSession(prev => {
       if (!prev) return null;
-
-      const updatedSession = {
-        ...prev,
-        messages,
-        updatedAt: new Date(),
-      };
-
-      setSessions(prevSessions =>
-        prevSessions.map(s => (s.id === updatedSession.id ? updatedSession : s))
-      );
-
+      const updatedSession = { ...prev, messages, updatedAt: new Date() };
+      setSessions(prevSessions => prevSessions.map(s => (s.id === updatedSession.id ? updatedSession : s)));
       return updatedSession;
     });
   };
 
   // Add a new message locally
-// Add a new message locally
-const addMessage = (
+ const addMessage = (
   message: Omit<ChatMessage, "id" | "timestamp"> & { id?: string }
-) => {
+): ChatMessage | null => {
+  let newMsg: ChatMessage | null = null;
+
   setCurrentSession(prev => {
     if (!prev) return null;
 
-    const newMessage: ChatMessage = {
+    newMsg = {
       ...message,
-      id: message.id ?? Date.now().toString(), // support custom ID
+      id: message.id ?? Date.now().toString(),
       timestamp: new Date(),
     };
 
     const updatedSession: ChatSession = {
       ...prev,
-      messages: [...prev.messages, newMessage],
+      messages: [...prev.messages, newMsg],
       updatedAt: new Date(),
-      title:
-        prev.messages.length === 0 && message.role === "user"
-          ? message.content.slice(0, 50) + (message.content.length > 50 ? "..." : "")
-          : prev.title,
     };
 
     setSessions(prevSessions =>
@@ -185,90 +171,62 @@ const addMessage = (
 
     return updatedSession;
   });
-};
 
-const updateMessage = (id: string, updated: Partial<ChatMessage>) => {
-  setCurrentSession(prev =>
-    prev
-      ? {
-          ...prev,
-          messages: prev.messages.map(m =>
-            m.id === id ? { ...m, ...updated } : m
-          ),
-          updatedAt: new Date(),
-        }
-      : prev
-  );
+  return newMsg;
 };
 
 
-  // Send message via API and update local state
-  // Send message via API and update local state
+  const updateMessage = (id: string, updated: Partial<ChatMessage>) => {
+    setCurrentSession(prev =>
+      prev
+        ? {
+            ...prev,
+            messages: prev.messages.map(m => (m.id === id ? { ...m, ...updated } : m)),
+            updatedAt: new Date(),
+          }
+        : prev
+    );
+  };
+
+  // Send message via API
+// Send message via API and update local state
 const sendMessage = async (message: string, file?: File) => {
-  if (!currentSession) return;
+  let session = currentSession;
+
+  // ✅ Auto-create session if none exists
+  if (!session) {
+    session = await createNewSession();
+    if (!session) {
+      console.error("Failed to create session");
+      return;
+    }
+    setCurrentSession(session); // make it active immediately
+  }
 
   // Add user message
-  addMessage({
+  const userMsg = addMessage({
     role: "user",
     content: message,
     attachments: file ? [file] : undefined,
   });
 
   // Add temporary assistant "thinking" message
-  const thinkingId = Date.now().toString();
-  addMessage({
-    role: "assistant",
-    content: "__thinking__",
-  });
+  const thinkingMsg = addMessage({ role: "assistant", content: "__thinking__" });
 
   try {
-    const response = await chatApi.sendMessage(message, currentSession.id);
+    const response = await chatApi.sendMessage(message, session.id);
 
     // Replace thinking message with actual response
-    setCurrentSession(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        messages: prev.messages.map(m =>
-          m.content === "__thinking__"
-            ? { ...m, content: response.message }
-            : m
-        ),
-      };
-    });
-
-    setSessions(prev =>
-      prev.map(s =>
-        s.id === currentSession.id
-          ? {
-              ...s,
-              messages: s.messages.map(m =>
-                m.content === "__thinking__"
-                  ? { ...m, content: response.message }
-                  : m
-              ),
-            }
-          : s
-      )
-    );
+    if (thinkingMsg) updateMessage(thinkingMsg.id!, { content: response.message });
   } catch (error) {
-    // Replace with error
-    setCurrentSession(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        messages: prev.messages.map(m =>
-          m.content === "__thinking__"
-            ? { ...m, content: "I'm sorry, I encountered an error. Please try again." }
-            : m
-        ),
-      };
-    });
+    if (thinkingMsg)
+      updateMessage(thinkingMsg.id!, {
+        content: "I'm sorry, I encountered an error. Please try again.",
+      });
   }
 };
 
-
-  // ✅ Rename a session
+  // Rename a session
   const renameSession = async (sessionId: string, newTitle: string) => {
     try {
       const res = await fetch(`${API_BASE}/${sessionId}/rename`, {
@@ -283,22 +241,18 @@ const sendMessage = async (message: string, file?: File) => {
       if (!res.ok) throw new Error("Failed to rename session");
 
       setSessions(prev =>
-        prev.map(s =>
-          s.id === sessionId ? { ...s, title: newTitle, updatedAt: new Date() } : s
-        )
+        prev.map(s => (s.id === sessionId ? { ...s, title: newTitle, updatedAt: new Date() } : s))
       );
 
       if (currentSession?.id === sessionId) {
-        setCurrentSession(prev =>
-          prev ? { ...prev, title: newTitle, updatedAt: new Date() } : prev
-        );
+        setCurrentSession(prev => (prev ? { ...prev, title: newTitle, updatedAt: new Date() } : prev));
       }
     } catch (err) {
       console.error("Rename error:", err);
     }
   };
 
-  // ✅ Delete a session
+  // Delete a session
   const deleteSession = async (sessionId: string) => {
     try {
       const res = await fetch(`${API_BASE}/${sessionId}`, {
@@ -311,10 +265,7 @@ const sendMessage = async (message: string, file?: File) => {
       if (!res.ok) throw new Error("Failed to delete session");
 
       setSessions(prev => prev.filter(s => s.id !== sessionId));
-
-      if (currentSession?.id === sessionId) {
-        setCurrentSession(null);
-      }
+      if (currentSession?.id === sessionId) setCurrentSession(null);
     } catch (err) {
       console.error("Delete error:", err);
     }
@@ -326,12 +277,13 @@ const sendMessage = async (message: string, file?: File) => {
         currentSession,
         sessions,
         createNewSession,
+        setCurrentSession,
         loadSession,
         addMessage,
         setMessages,
         sendMessage,
-        renameSession,  // ✅ expose rename
-        deleteSession,  // ✅ expose delete
+        renameSession,
+        deleteSession,
         isLoading,
       }}
     >

@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Mic, MicOff, Upload, Send } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { speechRecognition } from '@/utils/speechRecognition';
 import { useToast } from '@/hooks/use-toast';
+import { useChatContext } from '@/contexts/ChatContext'; // ✅ added
 
 interface ChatInputProps {
   onSendMessage: (message: string, file?: File) => void;
@@ -17,9 +18,20 @@ export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // ✅ chat context
+  const { currentSession, createNewSession, setCurrentSession } = useChatContext();
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (message.trim() || selectedFile) {
+      let session = currentSession;
+
+      // ✅ if no session, create one before sending
+      if (!session) {
+        session = await createNewSession();
+        if (session) setCurrentSession(session);
+      }
+
       onSendMessage(message.trim(), selectedFile || undefined);
       setMessage('');
       setSelectedFile(null);
@@ -37,7 +49,7 @@ export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
         });
         return;
       }
-      
+
       if (file.size > 10 * 1024 * 1024) { // 10MB limit
         toast({
           title: 'File too large',
@@ -46,49 +58,13 @@ export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
         });
         return;
       }
-      
+
       setSelectedFile(file);
     }
   };
 
-  const handleVoiceInput = () => {
-    if (!speechRecognition.isAvailable()) {
-      toast({
-        title: 'Voice input not supported',
-        description: 'Your browser does not support voice input.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (isListening) {
-      speechRecognition.stopListening();
-      setIsListening(false);
-      return;
-    }
-
-    setIsListening(true);
-    speechRecognition.startListening(
-      (transcript) => {
-        setMessage(prev => prev + ' ' + transcript);
-        setIsListening(false);
-      },
-      (error) => {
-        toast({
-          title: 'Voice input error',
-          description: error,
-          variant: 'destructive',
-        });
-        setIsListening(false);
-      },
-      () => {
-        setIsListening(false);
-      }
-    );
-  };
-
   return (
-    <div className=" bg-background p-4 border-[0.50px] border-gray-300 rounded-lg">
+    <div className="bg-background p-4 border border-gray-300 rounded-lg">
       <form onSubmit={handleSubmit} className="space-y-3">
         {selectedFile && (
           <div className="flex items-center gap-2 p-2 bg-muted rounded">
@@ -103,18 +79,17 @@ export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
             </Button>
           </div>
         )}
-        
-        <div className="flex gap-2 ">
+
+        <div className="flex gap-2">
           <div className="flex-1 relative">
             <Input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Type your message... "
+              placeholder="Type your message..."
               disabled={isLoading}
             />
-            
           </div>
-          
+
           <Button
             type="submit"
             disabled={isLoading || (!message.trim() && !selectedFile)}
@@ -124,7 +99,7 @@ export const ChatInput = ({ onSendMessage, isLoading }: ChatInputProps) => {
           </Button>
         </div>
       </form>
-      
+
       <input
         ref={fileInputRef}
         type="file"
