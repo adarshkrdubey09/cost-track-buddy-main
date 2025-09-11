@@ -149,8 +149,15 @@ export default function AddExpense() {
       setUploadProgress(90);
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || "Upload failed");
+                const errorData = await res.json().catch(() => ({}));
+
+        if(res.status==400){
+              throw new Error(errorData.detail || "Upload failed");
+
+        }
+    else{
+        console.log(errorData.detail)
+        throw new Error(errorData.message || "Upload failed");}
       }
 
       setUploadProgress(100);
