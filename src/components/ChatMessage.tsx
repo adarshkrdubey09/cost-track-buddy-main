@@ -13,40 +13,52 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
 
   return (
     <div
-      className={`flex gap-3 p-3 sm:p-4 rounded-xl border shadow-sm w-full ${
-        isUser ? 'bg-muted/40 border-primary/20' : 'bg-background border-border'
-      }`}
+      className={`flex gap-2 sm:gap-3 p-3 sm:p-4 md:p-5 rounded-lg md:rounded-xl border shadow-sm w-full max-w-full
+        ${isUser 
+          ? 'bg-muted/40 border-primary/20' 
+          : 'bg-background border-border'
+        }`}
     >
       {/* Avatar */}
-      <Avatar className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0">
+      <Avatar className="w-7 h-7 xs:w-8 xs:h-8 sm:w-10 sm:h-10 flex-shrink-0">
         <AvatarFallback
-          className={isUser ? 'bg-primary text-primary-foreground' : 'bg-secondary'}
+          className={`${isUser 
+            ? 'bg-primary text-primary-foreground' 
+            : 'bg-secondary'
+          } text-[10px] xs:text-xs sm:text-sm`}
         >
-          {isUser ? <User className="w-4 h-4 sm:w-5 sm:h-5" /> : <Bot className="w-4 h-4 sm:w-5 sm:h-5" />}
+          {isUser ? (
+            <User className="w-3 h-3 xs:w-4 xs:h-4 sm:w-5 sm:h-5" />
+          ) : (
+            <Bot className="w-3 h-3 xs:w-4 xs:h-4 sm:w-5 sm:h-5" />
+          )}
         </AvatarFallback>
       </Avatar>
 
       {/* Message body */}
-      <div className="flex-1 space-y-2 min-w-0">
+      <div className="flex-1 space-y-1 sm:space-y-2 min-w-0 max-w-full">
         {/* Name + Time */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium text-xs sm:text-sm">
+        <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+          <span className="font-medium text-xs xs:text-sm sm:text-base">
             {isUser ? 'You' : 'Assistant'}
           </span>
-          <span className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">
-            {new Date(message.timestamp).toLocaleTimeString()}
+          <span className="text-[9px] xs:text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
+            {new Date(message.timestamp).toLocaleTimeString([], { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            })}
           </span>
         </div>
 
         {/* Message Content */}
-        <div className="prose prose-xs sm:prose-sm max-w-none text-foreground overflow-x-auto break-words">
+        <div className="prose prose-xs xs:prose-sm sm:prose-base max-w-none text-foreground overflow-x-auto break-words">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
               table: ({ node, ...props }) => (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto my-1 xs:my-2">
                   <table
-                    className="border border-collapse border-gray-300 w-full text-xs sm:text-sm"
+                    className="border border-collapse border-gray-300 w-full text-xs xs:text-sm sm:text-base"
                     {...props}
                   />
                 </div>
@@ -60,6 +72,15 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
               td: ({ node, ...props }) => (
                 <td className="border border-gray-300 px-2 py-1" {...props} />
               ),
+              h1: ({ node, ...props }) => (
+                <h1 className="text-lg xs:text-xl sm:text-2xl my-1 xs:my-2" {...props} />
+              ),
+              h2: ({ node, ...props }) => (
+                <h2 className="text-base xs:text-lg sm:text-xl my-1 xs:my-2" {...props} />
+              ),
+              h3: ({ node, ...props }) => (
+                <h3 className="text-sm xs:text-base sm:text-lg my-1 xs:my-2" {...props} />
+              ),
             }}
           >
             {message.content}
@@ -68,11 +89,12 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
 
         {/* Attachments */}
         {message.attachments && message.attachments.length > 0 && (
-          <div className="flex gap-2 mt-2 flex-wrap">
+          <div className="flex gap-1 xs:gap-2 mt-1 xs:mt-2 flex-wrap">
             {message.attachments.map((file, index) => (
               <div
                 key={index}
-                className="text-[10px] sm:text-xs border border-accent bg-accent/20 text-accent-foreground px-2 py-1 rounded-md truncate max-w-[150px] sm:max-w-[200px]"
+                className="text-[10px] xs:text-xs border border-accent bg-accent/20 text-accent-foreground px-2 py-1 rounded truncate max-w-[120px] xs:max-w-[150px] sm:max-w-[200px]"
+                title={file.name}
               >
                 📄 {file.name}
               </div>

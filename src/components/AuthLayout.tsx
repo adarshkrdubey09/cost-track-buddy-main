@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import Logo from "@/components/images/RTL-LOGO 1 (1).png"
 
 interface AuthLayoutProps {
   title: string;
@@ -18,17 +19,22 @@ export const AuthLayout = ({ title, description, children }: AuthLayoutProps) =>
           <p className="text-muted-foreground mt-2">Manage your expenses efficiently</p>
         </div>
         
-        <Card className="shadow-xl border-0 bg-card/80 backdrop-blur">
-          <CardHeader className="space-y-1 text-center">
-            <CardTitle className="text-2xl font-semibold">{title}</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              {description}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {children}
-          </CardContent>
-        </Card>
+        <Card className="shadow-xl border-0 bg-card/80 backdrop-blur !m-0 !p-0">
+  <div className="flex justify-center !m-0 !p-0">
+   <img
+  src={Logo}
+  alt="logo"
+  className=" block w-40 h-36 md:w-48 md:h-46 object-contain !m-0 !p-0"
+  style={{ margin: 0, padding: 0 }}
+/>
+  </div>
+
+  <CardContent className="space-y-4">
+    {children}
+  </CardContent>
+</Card>
+
+
       </div>
     </div>
   );

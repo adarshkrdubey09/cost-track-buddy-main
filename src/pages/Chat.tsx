@@ -6,7 +6,6 @@ import { ChatSidebar } from '@/components/ChatSidebar';
 import { ChatMessage } from '@/components/ChatMessage';
 import { ChatInput } from '@/components/ChatInput';
 import { WelcomeHeader } from '@/components/WelcomeHeader';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { chatApi } from '@/utils/chatApi';
 
 const thinkingMessages = [
@@ -22,7 +21,8 @@ const ChatContent = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);   // for fetching
+  const [isThinking, setIsThinking] = useState(false); // for assistant typing
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const [dots, setDots] = useState(1);
 
@@ -87,7 +87,7 @@ const ChatContent = () => {
   const startThinking = () => {
     setThinkingIndex(0);
     setDots(1);
-    setIsLoading(true);
+    setIsThinking(true);
 
     if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
     thinkingIntervalRef.current = window.setInterval(() => {
@@ -110,63 +110,69 @@ const ChatContent = () => {
       clearInterval(dotsIntervalRef.current);
       dotsIntervalRef.current = null;
     }
-    setIsLoading(false);
+    setIsThinking(false);
     setThinkingIndex(0);
     setDots(1);
   };
 
   // Handle sending message
-  const handleSendMessage = async (message: string, file?: File) => {
-    if (!currentSession) return;
+  // ChatContent.tsx
+const handleSendMessage = async (message: string, file?: File, sessionId?: string) => {
+  const id = sessionId || currentSession?.id;
+  if (!id) return;
 
-    // Add user message immediately
+  // Add user message immediately
+  addMessage({
+    role: "user",
+    content: message,
+    attachments: file ? [file] : undefined,
+  });
+
+  startThinking(); // show thinking messages
+
+  try {
+    const response = await chatApi.sendMessage(message, id);
+
+    // Add assistant reply
     addMessage({
-      role: "user",
-      content: message,
-      attachments: file ? [file] : undefined,
+      role: "assistant",
+      content: response.message,
     });
+  } catch (error) {
+    addMessage({
+      role: "assistant",
+      content: "I'm sorry, I encountered an error. Please try again.",
+    });
+  } finally {
+    stopThinking(); // stop thinking messages
+  }
+};
 
-    startThinking(); // show thinking messages
-
-    try {
-      const response = await chatApi.sendMessage(message, currentSession.id);
-
-      // Add assistant reply
-      addMessage({
-        role: "assistant",
-        content: response.message,
-      });
-    } catch (error) {
-      addMessage({
-        role: "assistant",
-        content: "I'm sorry, I encountered an error. Please try again.",
-      });
-    } finally {
-      stopThinking(); // stop thinking messages
-    }
-  };
 
   return (
     <div className="flex h-screen flex-col md:flex-row">
       {/* Sidebar */}
-      <div className="flex-shrink-0">
+      <div className="flex-shrink-0 w-full md:w-64 border-r">
         <ChatSidebar />
       </div>
 
       {/* Chat Area */}
       <div className="flex-1 flex flex-col bg-white">
-        {!currentSession || currentSession.messages.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center">
-            <WelcomeHeader />
-          </div>
-        ) : (
-          <ScrollArea className="flex-1 p-4">
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 pb-28"> 
+          {/* 👆 Added pb-28 so messages don't hide behind input */}
+
+          {!currentSession || currentSession.messages.length === 0 ? (
+            <div className="flex h-full items-center justify-center">
+              <WelcomeHeader />
+            </div>
+          ) : (
             <div className="max-w-4xl mx-auto space-y-2">
               {currentSession.messages.map((message) => (
                 <ChatMessage key={message.id} message={message} />
               ))}
 
-              {isLoading && (
+              {isThinking && (
                 <div className="flex justify-start p-2">
                   <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
                     <span>{thinkingMessages[thinkingIndex]}</span>
@@ -174,15 +180,16 @@ const ChatContent = () => {
                   </div>
                 </div>
               )}
-
               <div ref={messagesEndRef} />
             </div>
-          </ScrollArea>
-        )}
+          )}
+        </div>
 
         {/* Input */}
-        <div className="max-w-4xl mx-auto w-full p-2 md:p-4">
-          <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+        <div className="sticky bottom-20 bg-white border-t p-2 md:p-4">
+          <div className="max-w-4xl mx-auto w-full">
+            <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+          </div>
         </div>
       </div>
     </div>
