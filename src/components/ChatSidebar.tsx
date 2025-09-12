@@ -4,7 +4,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChatContext } from '@/contexts/ChatContext';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-
 export const ChatSidebar = () => {
   const {
     sessions,
@@ -52,6 +51,7 @@ export const ChatSidebar = () => {
   //   initializeSession();
   // }, [currentSession, sessions, createNewSession, setCurrentSession]);
 
+
   const handleNewChat = async () => {
     const newSession = await createNewSession();
     if (newSession) setCurrentSession(newSession);
@@ -81,16 +81,17 @@ export const ChatSidebar = () => {
   return (
     <>
       {/* Mobile toggle button */}
-      {isMobile && (
-        <Button
-          variant="outline"
-          size="icon"
-          className="fixed top-4 left-4 z-40 md:hidden"
-          onClick={() => setIsMobileOpen(!isMobileOpen)}
-        >
-          {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
-      )}
+     {isMobile && (
+  <Button
+    variant="outline"
+    size="icon"
+    className="fixed top-2 left-12 z-90 md:hidden" // 🔥 changed from z-40 → z-50
+    onClick={() => setIsMobileOpen(!isMobileOpen)}
+  >
+    {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+  </Button>
+)}
+
 
       {/* Overlay for mobile */}
       {isMobileOpen && isMobile && (
