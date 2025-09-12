@@ -154,7 +154,7 @@ export const ChatSidebar = () => {
                           <div className="font-medium text-sm truncate">
                             {session.title}
                           </div>
-                          <div className="text-xs text-muted-foreground mt-1">
+                          <div className="text-xs  mt-1">
                             {session.updatedAt.toLocaleDateString("en-GB", {
                               day: "2-digit",
                               month: "short",

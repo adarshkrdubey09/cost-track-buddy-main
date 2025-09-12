@@ -14,11 +14,13 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { url } from "inspector";
 
 const navItems = [
   { title: "New Chat", url: "/chat", icon: MessageSquare },
   { title: "Home", url: "/home", icon: Home },
   { title: "Add Expense", url: "/add-expense", icon: Plus },
+  {title:"View Expense" ,url:"/view-expenses",icon:LayoutDashboard}
 ];
 
 export function AppSidebar() {
