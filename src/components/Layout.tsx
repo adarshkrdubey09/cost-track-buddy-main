@@ -7,7 +7,7 @@ interface LayoutProps {
 }
 
 export const Layout = ({ children }: LayoutProps) => {
-  const userEmail = localStorage.getItem("userEmail");
+  const userEmail = localStorage.getItem("userloginname");
 
   return (
     <SidebarProvider>

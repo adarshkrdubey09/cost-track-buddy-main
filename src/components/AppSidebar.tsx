@@ -30,12 +30,36 @@ export function AppSidebar() {
 
   const isActive = (path: string) => currentPath === path;
 
-  const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated");
-    localStorage.removeItem("userEmail");
-    localStorage.removeItem("userName");
+
+const handleLogout = async () => {
+  const token = localStorage.getItem("access_token"); // 🔑 fetch token
+
+  try {
+    if (token) {
+      await fetch("https://ai.rosmerta.dev/expense/api/auth/logout", {
+        method: "POST", // ✅ check if API needs POST or GET
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    }
+  } catch (error) {
+    console.error("Logout API failed:", error);
+  } finally {
+    // ✅ clear all local storage
+   localStorage.removeItem('access_token');
+localStorage.removeItem('isAuthenticated');
+localStorage.removeItem('userfirstname');
+localStorage.removeItem('userlastname');
+localStorage.removeItem('userloginname');
+
+
+    // ✅ navigate to login
     navigate("/login");
-  };
+  }
+};
+
 
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "hover:bg-sidebar-accent/50";
