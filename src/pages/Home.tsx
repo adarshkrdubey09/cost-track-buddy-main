@@ -46,7 +46,7 @@ export default function Home() {
       <div className="space-y-8">
         {/* Header Section */}
         <div className="text-center px-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Home</h1>
+          <h2 className="text-2xl sm:text-3xl font-medium text-foreground">Home</h2>
           <p className="text-sm sm:text-base text-muted-foreground">Manage and track your expenses</p>
         </div>
 

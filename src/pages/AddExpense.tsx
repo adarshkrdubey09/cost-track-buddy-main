@@ -197,7 +197,7 @@ export default function AddExpense() {
       <Layout>
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-6 lg:mb-8">
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Upload Expense Data</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground font-medium">Upload Expense Data</h1>
             <p className="text-sm sm:text-base text-muted-foreground">
               Upload your expense data for {formData.state} - {formData.month} {formData.year}
             </p>
@@ -260,7 +260,7 @@ export default function AddExpense() {
     <Layout>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-6 lg:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Add New Expense</h1>
+          <h1 className="text-2xl sm:text-3xl  text-foreground font-medium">Add New Expense</h1>
           <p className="text-sm sm:text-base text-muted-foreground">
             Select period details to add expense data
           </p>

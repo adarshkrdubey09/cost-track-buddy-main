@@ -90,7 +90,7 @@ useEffect(() => {
       if (!currentToken) return;
 
       const res = await fetch("https://ai.rosmerta.dev/expense/api/auth/check", {
-        method: "HEAD", // Use GET instead of HEAD
+        method: "HEAD", // 
         headers: { Authorization: `Bearer ${currentToken}` },
       });
 
