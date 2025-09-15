@@ -1,6 +1,6 @@
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant'| "assistant_thinking";
   content: string;
   timestamp: Date;
   attachments?: File[];

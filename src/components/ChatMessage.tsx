@@ -1,3 +1,4 @@
+
 import { ChatMessage as ChatMessageType } from '@/types/chat';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { User, Bot } from 'lucide-react';

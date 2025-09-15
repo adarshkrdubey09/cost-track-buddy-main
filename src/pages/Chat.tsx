@@ -8,6 +8,7 @@ import { ChatInput } from '@/components/ChatInput';
 import { WelcomeHeader } from '@/components/WelcomeHeader';
 import { chatApi } from '@/utils/chatApi';
 
+
 const thinkingMessages = [
   "Thinking about your question…",
   "Analyzing your request…",
@@ -19,12 +20,14 @@ const thinkingMessages = [
 const ChatContent = () => {
   const { currentSession, setMessages, addMessage } = useChatContext();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const [isLoading, setIsLoading] = useState(false);   // for fetching
-  const [isThinking, setIsThinking] = useState(false); // for assistant typing
+  const [isLoading, setIsLoading] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const [dots, setDots] = useState(1);
+  const [userAtBottom, setUserAtBottom] = useState(true); // ✅ track if user is near bottom
 
   const thinkingIntervalRef = useRef<number | null>(null);
   const dotsIntervalRef = useRef<number | null>(null);
@@ -36,10 +39,21 @@ const ChatContent = () => {
     }
   }, [navigate]);
 
-  // Scroll to bottom whenever messages or thinking index change
+  // Detect user scroll position
+  const handleScroll = () => {
+    if (!scrollContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+
+    // If within 50px of bottom, consider user "at bottom"
+    setUserAtBottom(scrollHeight - scrollTop - clientHeight < 50);
+  };
+
+  // Auto scroll only if user is at bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [currentSession?.messages, thinkingIndex, dots]);
+    if (userAtBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [currentSession?.messages, thinkingIndex, dots, userAtBottom]);
 
   // Fetch messages when a conversation is selected
   useEffect(() => {
@@ -55,7 +69,7 @@ const ChatContent = () => {
             method: "GET",
             headers: {
               "Content-Type": "application/json",
-              ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
           }
         );
@@ -91,12 +105,12 @@ const ChatContent = () => {
 
     if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
     thinkingIntervalRef.current = window.setInterval(() => {
-      setThinkingIndex(prev => (prev + 1) % thinkingMessages.length);
+      setThinkingIndex((prev) => (prev + 1) % thinkingMessages.length);
     }, 4000);
 
     if (dotsIntervalRef.current) clearInterval(dotsIntervalRef.current);
     dotsIntervalRef.current = window.setInterval(() => {
-      setDots(prev => (prev >= 3 ? 1 : prev + 1));
+      setDots((prev) => (prev >= 3 ? 1 : prev + 1));
     }, 500);
   };
 
@@ -116,38 +130,38 @@ const ChatContent = () => {
   };
 
   // Handle sending message
-  // ChatContent.tsx
-const handleSendMessage = async (message: string, file?: File, sessionId?: string) => {
-  const id = sessionId || currentSession?.id;
-  if (!id) return;
+  const handleSendMessage = async (
+    message: string,
+    file?: File,
+    sessionId?: string
+  ) => {
+    const id = sessionId || currentSession?.id;
+    if (!id) return;
 
-  // Add user message immediately
-  addMessage({
-    role: "user",
-    content: message,
-    attachments: file ? [file] : undefined,
-  });
-
-  startThinking(); // show thinking messages
-
-  try {
-    const response = await chatApi.sendMessage(message, id);
-
-    // Add assistant reply
     addMessage({
-      role: "assistant",
-      content: response.message,
+      role: "user",
+      content: message,
+      attachments: file ? [file] : undefined,
     });
-  } catch (error) {
-    addMessage({
-      role: "assistant",
-      content: "I'm sorry, I encountered an error. Please try again.",
-    });
-  } finally {
-    stopThinking(); // stop thinking messages
-  }
-};
 
+    startThinking();
+
+    try {
+      const response = await chatApi.sendMessage(message, id);
+
+      addMessage({
+        role: "assistant",
+        content: response.message,
+      });
+    } catch (error) {
+      addMessage({
+        role: "assistant",
+        content: "I'm sorry, I encountered an error. Please try again.",
+      });
+    } finally {
+      stopThinking();
+    }
+  };
 
   return (
     <div className="flex h-screen flex-col md:flex-row">
@@ -159,9 +173,11 @@ const handleSendMessage = async (message: string, file?: File, sessionId?: strin
       {/* Chat Area */}
       <div className="flex-1 flex flex-col bg-white">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 pb-28"> 
-          {/* 👆 Added pb-28 so messages don't hide behind input */}
-
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto p-4 pb-28"
+        >
           {!currentSession || currentSession.messages.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <WelcomeHeader />
@@ -176,7 +192,9 @@ const handleSendMessage = async (message: string, file?: File, sessionId?: strin
                 <div className="flex justify-start p-2">
                   <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
                     <span>{thinkingMessages[thinkingIndex]}</span>
-                    <span className="animate-blink">{'.'.repeat(dots)}</span>
+<span className="animate-blink">
+  {'.'.repeat(dots)}
+</span>
                   </div>
                 </div>
               )}
