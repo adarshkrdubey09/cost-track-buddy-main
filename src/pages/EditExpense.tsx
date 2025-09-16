@@ -21,7 +21,7 @@ export default function EditExpense() {
   useEffect(() => {
     // Check if user is authenticated
     if (!localStorage.getItem("isAuthenticated")) {
-      navigate("/login");
+      navigate("/login",{ relative: 'route' });
       return;
     }
 
@@ -38,7 +38,7 @@ export default function EditExpense() {
           description: "The requested expense could not be found",
           variant: "destructive",
         });
-        navigate("/home");
+        navigate("/home",{ relative: 'route' });
       }
     }
   }, [id, navigate, toast]);

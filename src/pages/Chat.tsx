@@ -55,7 +55,7 @@ const ChatContent = () => {
   // Redirect if not authenticated
   useEffect(() => {
     if (!localStorage.getItem("isAuthenticated")) {
-      navigate("/login");
+      navigate("/login",{ relative: 'route' });
     }
   }, [navigate]);
 

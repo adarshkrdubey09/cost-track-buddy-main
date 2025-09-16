@@ -58,7 +58,7 @@ localStorage.removeItem('userloginname');
 
 
     // ✅ navigate to login
-    navigate("/login");
+    navigate("/login",{ relative: 'route' });
   }
 };
 
@@ -73,7 +73,7 @@ localStorage.removeItem('userloginname');
         {!isCollapsed && (
           <h1 
             className="text-lg font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent cursor-pointer hover:opacity-80"
-            onClick={() => navigate("/chat")}
+            onClick={() => {navigate("/chat",{ relative: 'route' })}}
           >
           <div className="flex justify-start items-center">
   <img
@@ -89,7 +89,7 @@ localStorage.removeItem('userloginname');
         {isCollapsed && (
           <div 
             className="w-6 h-6 bg-gradient-to-r from-primary to-accent rounded cursor-pointer hover:opacity-80"
-            onClick={() => navigate("/chat")}
+            onClick={() => navigate("/chat",{ relative: 'route' })}
           ></div>
         )}
       </div>

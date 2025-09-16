@@ -9,7 +9,7 @@ const Index = () => {
   useEffect(() => {
     // Check if user is already authenticated
     if (localStorage.getItem("isAuthenticated")) {
-      navigate("/chat");
+      navigate("/chat",{ relative: 'route' });
     }
   }, [navigate]);
 
@@ -67,7 +67,7 @@ const Index = () => {
           <Button
             size="lg"
             className="px-6 sm:px-8 py-3 text-base sm:text-lg rounded-xl shadow-md"
-            onClick={() => navigate("/login")}
+            onClick={() => navigate("/login",{ relative: 'route' })}
           >
             Sign In
           </Button>

@@ -55,7 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       clearTimer();
       clearIntervalRef();
-      window.location.href = "/login";
+      window.location.href = "login";
     }
   };
 

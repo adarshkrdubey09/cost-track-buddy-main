@@ -37,7 +37,7 @@ export default function AddExpense() {
   // Check authentication
   useEffect(() => {
     if (!localStorage.getItem("isAuthenticated")) {
-      navigate("/login");
+      navigate("/login",{ relative: 'route' });
       return;
     }
   }, [navigate]);
@@ -168,7 +168,7 @@ export default function AddExpense() {
       });
 
       // Navigate after a brief delay to show success
-      setTimeout(() => navigate("/home"), 1000);
+      setTimeout(() => navigate("/home",{ relative: 'route' }), 1000);
     } catch (err: any) {
       setUploading(false);
       setUploadProgress(0);
@@ -346,7 +346,7 @@ export default function AddExpense() {
                 <Button 
                   type="button" 
                   variant="outline" 
-                  onClick={() => navigate("/home")}
+                  onClick={() => navigate("/home",{ relative: 'route' })}
                   className="flex-1"
                 >
                   Cancel

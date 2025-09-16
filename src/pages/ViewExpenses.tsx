@@ -50,7 +50,7 @@ const clearSessionAndRedirect = (navigate: any) => {
   localStorage.removeItem("isAuthenticated");
     localStorage.removeItem("sessionExpired")
 
-  navigate("/login");
+  navigate("/login",{ relative: 'route' });
 };
 
 export default function ViewExpenses() {

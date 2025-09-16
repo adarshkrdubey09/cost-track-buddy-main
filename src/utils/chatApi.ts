@@ -40,7 +40,7 @@ export class ChatApiService {
 
       if (response.status === 401) {
         localStorage.removeItem("access_token");
-        window.location.href = "/login";
+        window.location.href = "login";
         return {
           message: "Session expired. Please log in again.",
           error: "Unauthorized (401)",
@@ -82,7 +82,7 @@ export class ChatApiService {
 
       if (response.status === 401) {
         localStorage.removeItem("access_token");
-        window.location.href = "/login";
+        window.location.href = "login";
         return [];
       }
 
