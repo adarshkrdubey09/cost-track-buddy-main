@@ -8,7 +8,6 @@ import { ChatInput } from '@/components/ChatInput';
 import { WelcomeHeader } from '@/components/WelcomeHeader';
 import { chatApi } from '@/utils/chatApi';
 
-
 const thinkingMessages = [
   "Thinking about your question…",
   "Analyzing your request…",
@@ -26,8 +25,9 @@ const ChatContent = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [thinkingIndex, setThinkingIndex] = useState(0);
-  const [dots, setDots] = useState(1);
-  const [userAtBottom, setUserAtBottom] = useState(true); // ✅ track if user is near bottom
+  const [dots, setDots] = useState('');
+  const [userAtBottom, setUserAtBottom] = useState(true);
+  const [thinkingSessionId, setThinkingSessionId] = useState<string | null>(null);
 
   const thinkingIntervalRef = useRef<number | null>(null);
   const dotsIntervalRef = useRef<number | null>(null);
@@ -38,6 +38,14 @@ const ChatContent = () => {
       navigate("/login");
     }
   }, [navigate]);
+
+  // Clean up intervals on component unmount
+  useEffect(() => {
+    return () => {
+      if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
+      if (dotsIntervalRef.current) clearInterval(dotsIntervalRef.current);
+    };
+  }, []);
 
   // Detect user scroll position
   const handleScroll = () => {
@@ -50,10 +58,10 @@ const ChatContent = () => {
 
   // Auto scroll only if user is at bottom
   useEffect(() => {
-    if (userAtBottom) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (userAtBottom && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [currentSession?.messages, thinkingIndex, dots, userAtBottom]);
+  }, [currentSession?.messages, isThinking, userAtBottom]);
 
   // Fetch messages when a conversation is selected
   useEffect(() => {
@@ -90,31 +98,38 @@ const ChatContent = () => {
         console.error("Failed to fetch messages:", error);
       } finally {
         setIsLoading(false);
-        setThinkingIndex(0);
       }
     };
 
     fetchMessages();
   }, [currentSession, setMessages]);
 
-  // Start thinking
-  const startThinking = () => {
+  // Start thinking animation
+  const startThinking = (sessionId: string) => {
+    // Clear any existing intervals
+    if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
+    if (dotsIntervalRef.current) clearInterval(dotsIntervalRef.current);
+
+    setThinkingSessionId(sessionId);
     setThinkingIndex(0);
-    setDots(1);
+    setDots('.');
     setIsThinking(true);
 
-    if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
+    // Cycle through thinking messages
     thinkingIntervalRef.current = window.setInterval(() => {
       setThinkingIndex((prev) => (prev + 1) % thinkingMessages.length);
     }, 4000);
 
-    if (dotsIntervalRef.current) clearInterval(dotsIntervalRef.current);
+    // Animate the dots
     dotsIntervalRef.current = window.setInterval(() => {
-      setDots((prev) => (prev >= 3 ? 1 : prev + 1));
+      setDots((prev) => {
+        if (prev.length >= 3) return '.';
+        return prev + '.';
+      });
     }, 500);
   };
 
-  // Stop thinking
+  // Stop thinking animation
   const stopThinking = () => {
     if (thinkingIntervalRef.current) {
       clearInterval(thinkingIntervalRef.current);
@@ -126,7 +141,8 @@ const ChatContent = () => {
     }
     setIsThinking(false);
     setThinkingIndex(0);
-    setDots(1);
+    setDots('');
+    setThinkingSessionId(null);
   };
 
   // Handle sending message
@@ -138,30 +154,39 @@ const ChatContent = () => {
     const id = sessionId || currentSession?.id;
     if (!id) return;
 
+    // Add user message
     addMessage({
       role: "user",
       content: message,
       attachments: file ? [file] : undefined,
     });
 
-    startThinking();
+    // Start thinking animation
+    startThinking(id);
 
     try {
+      // Send message to API
       const response = await chatApi.sendMessage(message, id);
 
+      // Add assistant response
       addMessage({
         role: "assistant",
         content: response.message,
       });
     } catch (error) {
+      console.error("Error sending message:", error);
       addMessage({
         role: "assistant",
         content: "I'm sorry, I encountered an error. Please try again.",
       });
     } finally {
+      // Stop thinking animation
       stopThinking();
     }
   };
+
+  // Check if thinking message should be shown for current session
+  const showThinkingMessage = isThinking && thinkingSessionId === currentSession?.id;
 
   return (
     <div className="flex h-screen flex-col md:flex-row">
@@ -178,7 +203,7 @@ const ChatContent = () => {
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto p-4 pb-28"
         >
-          {!currentSession || currentSession.messages.length === 0 ? (
+          {!currentSession || (currentSession.messages.length === 0 && !showThinkingMessage) ? (
             <div className="flex h-full items-center justify-center">
               <WelcomeHeader />
             </div>
@@ -188,13 +213,11 @@ const ChatContent = () => {
                 <ChatMessage key={message.id} message={message} />
               ))}
 
-              {isThinking && (
+              {showThinkingMessage && (
                 <div className="flex justify-start p-2">
                   <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
                     <span>{thinkingMessages[thinkingIndex]}</span>
-<span className="animate-blink">
-  {'.'.repeat(dots)}
-</span>
+                    <span className="min-w-[12px]">{dots}</span>
                   </div>
                 </div>
               )}
@@ -204,9 +227,12 @@ const ChatContent = () => {
         </div>
 
         {/* Input */}
-        <div className="sticky bottom-20 bg-white border-t p-2 md:p-4">
+        <div className="sticky bottom-0 bg-white border-t p-2 md:p-4">
           <div className="max-w-4xl mx-auto w-full">
-            <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+            <ChatInput 
+              onSendMessage={handleSendMessage} 
+              isLoading={isLoading || isThinking} 
+            />
           </div>
         </div>
       </div>

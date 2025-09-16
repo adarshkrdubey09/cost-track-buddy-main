@@ -111,13 +111,17 @@ export const ChatProvider = ({ children }: ChatProviderProps) => {
 
       const sessionData = await res.json();
 
-      const messages: ChatMessage[] = sessionData.messages.map((m: any) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        timestamp: new Date(m.created_at),
-        attachments: m.attachments || [],
-      }));
+      const messages: ChatMessage[] = sessionData.messages
+  .map((m: any) => ({
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    timestamp: new Date(m.created_at),
+    attachments: m.attachments || [],
+  }))
+  // Sort by timestamp ascending (oldest first)
+  .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
 
       const loadedSession: ChatSession = {
         id: sessionData.id,
