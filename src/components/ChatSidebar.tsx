@@ -2,8 +2,9 @@ import { MessageSquare, Plus, Trash2, Edit, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useChatContext } from '@/contexts/ChatContext';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+
 export const ChatSidebar = () => {
   const {
     sessions,
@@ -19,6 +20,7 @@ export const ChatSidebar = () => {
   const [newTitle, setNewTitle] = useState<string>("");
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
 
   // Check if mobile view
   useEffect(() => {
@@ -34,24 +36,6 @@ export const ChatSidebar = () => {
     return () => window.removeEventListener('resize', checkIsMobile);
   }, []);
 
-  // useEffect(() => {
-  //   const initializeSession = async () => {
-  //     if (!currentSession) {
-  //       if (sessions.length === 0) {
-  //         // No sessions exist → create a new one
-  //         const newSession = await createNewSession();
-  //         if (newSession) setCurrentSession(newSession);
-  //       } else {
-  //         // Sessions exist → set the first one as current
-  //         setCurrentSession(sessions[0]);
-  //       }
-  //     }
-  //   };
-
-  //   initializeSession();
-  // }, [currentSession, sessions, createNewSession, setCurrentSession]);
-
-
   const handleNewChat = async () => {
     const newSession = await createNewSession();
     if (newSession) setCurrentSession(newSession);
@@ -59,17 +43,18 @@ export const ChatSidebar = () => {
   };
 
   const handleLoadSession = async (sessionId: string) => {
-    await loadSession(sessionId);
-    const loaded = sessions.find(s => s.id === sessionId);
-    if (loaded) setCurrentSession(loaded);
+    // Only load if it's not the current session
+    if (currentSession?.id !== sessionId) {
+      await loadSession(sessionId);
+      // The context should handle setting the current session after loading
+    }
     if (isMobile) setIsMobileOpen(false);
   };
 
   // Close sidebar when clicking outside on mobile
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      const sidebar = document.querySelector('.chat-sidebar');
-      if (isMobileOpen && sidebar && !sidebar.contains(event.target as Node)) {
+      if (isMobileOpen && sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
         setIsMobileOpen(false);
       }
     };
@@ -81,17 +66,16 @@ export const ChatSidebar = () => {
   return (
     <>
       {/* Mobile toggle button */}
-     {isMobile && (
-  <Button
-    variant="outline"
-    size="icon"
-    className="fixed top-2 left-12 z-90 md:hidden" // 🔥 changed from z-40 → z-50
-    onClick={() => setIsMobileOpen(!isMobileOpen)}
-  >
-    {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-  </Button>
-)}
-
+      {isMobile && (
+        <Button
+          variant="outline"
+          size="icon"
+          className="fixed top-2 left-12 z-50 md:hidden"
+          onClick={() => setIsMobileOpen(!isMobileOpen)}
+        >
+          {isMobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </Button>
+      )}
 
       {/* Overlay for mobile */}
       {isMobileOpen && isMobile && (
@@ -100,6 +84,7 @@ export const ChatSidebar = () => {
 
       {/* Sidebar */}
       <div
+        ref={sidebarRef}
         className={cn(
           "chat-sidebar w-64 border-r bg-muted/30 flex flex-col h-screen fixed md:relative z-40 transition-transform duration-300",
           isMobile ? "transform " + (isMobileOpen ? "translate-x-0" : "-translate-x-full") : "translate-x-0"
@@ -133,7 +118,7 @@ export const ChatSidebar = () => {
                       {editingSessionId === session.id ? (
                         <input
                           type="text"
-                          className="w-full text-sm border rounded px-1 py-1"
+                          className="w-full text-sm border rounded px-1 py-1 text-foreground bg-background" // Fixed text color
                           value={newTitle}
                           onChange={(e) => setNewTitle(e.target.value)}
                           onBlur={() => {
@@ -147,14 +132,14 @@ export const ChatSidebar = () => {
                             }
                           }}
                           autoFocus
-                          onClick={(e) => e.stopPropagation()} // ✅ prevent triggering Button click
+                          onClick={(e) => e.stopPropagation()}
                         />
                       ) : (
                         <>
                           <div className="font-medium text-sm truncate">
                             {session.title}
                           </div>
-                          <div className="text-xs  mt-1">
+                          <div className="text-xs text-muted-foreground mt-1">
                             {session.updatedAt.toLocaleDateString("en-GB", {
                               day: "2-digit",
                               month: "short",
@@ -184,7 +169,7 @@ export const ChatSidebar = () => {
                     variant="ghost"
                     className="h-8 w-8"
                     onClick={(e) => {
-                      e.stopPropagation(); // ✅ prevent row click
+                      e.stopPropagation();
                       setEditingSessionId(session.id);
                       setNewTitle(session.title);
                     }}
@@ -198,7 +183,7 @@ export const ChatSidebar = () => {
                     variant="ghost"
                     className="h-8 w-8"
                     onClick={(e) => {
-                      e.stopPropagation(); // ✅ prevent row click
+                      e.stopPropagation();
                       deleteSession(session.id);
                     }}
                   >
@@ -215,7 +200,6 @@ export const ChatSidebar = () => {
             )}
           </div>
         </ScrollArea>
-
       </div>
     </>
   );

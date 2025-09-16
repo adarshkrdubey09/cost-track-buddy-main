@@ -17,7 +17,7 @@ import {
 import { url } from "inspector";
 
 const navItems = [
-  { title: "New Chat", url: "/chat", icon: MessageSquare },
+  { title: "Chat", url: "/chat", icon: MessageSquare },
   { title: "Home", url: "/home", icon: Home },
   { title: "Add Expense", url: "/add-expense", icon: Plus },
   {title:"View Expense" ,url:"/view-expenses",icon:LayoutDashboard}

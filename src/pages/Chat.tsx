@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { ChatProvider, useChatContext } from '@/contexts/ChatContext';
@@ -24,13 +24,33 @@ const ChatContent = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
-  const [thinkingIndex, setThinkingIndex] = useState(0);
+  const [thinkingMessage, setThinkingMessage] = useState(thinkingMessages[0]);
   const [dots, setDots] = useState('');
   const [userAtBottom, setUserAtBottom] = useState(true);
   const [thinkingSessionId, setThinkingSessionId] = useState<string | null>(null);
+  const [inputDisabled, setInputDisabled] = useState<string | null>(null);
 
   const thinkingIntervalRef = useRef<number | null>(null);
   const dotsIntervalRef = useRef<number | null>(null);
+  const hasFetchedRef = useRef<Set<string>>(new Set());
+  const currentSessionIdRef = useRef<string | null>(null);
+  const thinkingIndexRef = useRef<number>(0);
+  const thinkingSessionIdRef = useRef<string | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+
+  // Update refs when state changes
+  useEffect(() => {
+    currentSessionIdRef.current = currentSession?.id || null;
+    thinkingSessionIdRef.current = thinkingSessionId;
+  }, [currentSession, thinkingSessionId]);
+
+  // Set mounted ref for cleanup
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -42,19 +62,25 @@ const ChatContent = () => {
   // Clean up intervals on component unmount
   useEffect(() => {
     return () => {
-      if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
-      if (dotsIntervalRef.current) clearInterval(dotsIntervalRef.current);
+      if (thinkingIntervalRef.current) {
+        clearInterval(thinkingIntervalRef.current);
+        thinkingIntervalRef.current = null;
+      }
+      if (dotsIntervalRef.current) {
+        clearInterval(dotsIntervalRef.current);
+        dotsIntervalRef.current = null;
+      }
     };
   }, []);
 
   // Detect user scroll position
-  const handleScroll = () => {
+  const handleScroll = useCallback(() => {
     if (!scrollContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
 
     // If within 50px of bottom, consider user "at bottom"
     setUserAtBottom(scrollHeight - scrollTop - clientHeight < 50);
-  };
+  }, []);
 
   // Auto scroll only if user is at bottom
   useEffect(() => {
@@ -63,13 +89,17 @@ const ChatContent = () => {
     }
   }, [currentSession?.messages, isThinking, userAtBottom]);
 
-  // Fetch messages when a conversation is selected
+  // Fetch messages when a conversation is selected - FIXED TO PREVENT REPEATED CALLS
   useEffect(() => {
     const fetchMessages = async () => {
-      if (!currentSession) return;
+      // Early return conditions to prevent unnecessary calls
+      if (!currentSession || hasFetchedRef.current.has(currentSession.id)) {
+        return;
+      }
 
       setIsLoading(true);
       try {
+        console.log('Fetching messages for session:', currentSession.id);
         const token = localStorage.getItem("access_token");
         const response = await fetch(
           `https://ai.rosmerta.dev/chat/conversations/${currentSession.id}/messages`,
@@ -94,43 +124,29 @@ const ChatContent = () => {
             created_at: msg.created_at,
           }))
         );
+        
+        // Mark this session as fetched
+        hasFetchedRef.current.add(currentSession.id);
+        console.log('Messages fetched successfully for session:', currentSession.id);
       } catch (error) {
         console.error("Failed to fetch messages:", error);
+        // Remove from fetched set on error to allow retry
+        hasFetchedRef.current.delete(currentSession.id);
       } finally {
-        setIsLoading(false);
+        if (isMountedRef.current) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchMessages();
-  }, [currentSession, setMessages]);
+  }, [currentSession, setMessages]); // Only depend on currentSession and setMessages
 
-  // Start thinking animation
-  const startThinking = (sessionId: string) => {
-    // Clear any existing intervals
-    if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
-    if (dotsIntervalRef.current) clearInterval(dotsIntervalRef.current);
-
-    setThinkingSessionId(sessionId);
-    setThinkingIndex(0);
-    setDots('.');
-    setIsThinking(true);
-
-    // Cycle through thinking messages
-    thinkingIntervalRef.current = window.setInterval(() => {
-      setThinkingIndex((prev) => (prev + 1) % thinkingMessages.length);
-    }, 4000);
-
-    // Animate the dots
-    dotsIntervalRef.current = window.setInterval(() => {
-      setDots((prev) => {
-        if (prev.length >= 3) return '.';
-        return prev + '.';
-      });
-    }, 500);
-  };
-
-  // Stop thinking animation
-  const stopThinking = () => {
+  // Start thinking animation with proper cleanup
+  const startThinking = useCallback((sessionId: string) => {
+    console.log('Starting thinking for session:', sessionId);
+    
+    // Clear any existing intervals first
     if (thinkingIntervalRef.current) {
       clearInterval(thinkingIntervalRef.current);
       thinkingIntervalRef.current = null;
@@ -139,22 +155,69 @@ const ChatContent = () => {
       clearInterval(dotsIntervalRef.current);
       dotsIntervalRef.current = null;
     }
+
+    setThinkingSessionId(sessionId);
+    setInputDisabled(sessionId);
+    setThinkingMessage(thinkingMessages[0]);
+    setDots('.');
+    setIsThinking(true);
+    thinkingIndexRef.current = 0;
+
+    // Cycle through thinking messages
+    thinkingIntervalRef.current = window.setInterval(() => {
+      if (!isMountedRef.current) return;
+      
+      thinkingIndexRef.current = (thinkingIndexRef.current + 1) % thinkingMessages.length;
+      setThinkingMessage(thinkingMessages[thinkingIndexRef.current]);
+    }, 4000);
+
+    // Animate the dots
+    dotsIntervalRef.current = window.setInterval(() => {
+      if (!isMountedRef.current) return;
+      
+      setDots((prev) => {
+        if (prev.length >= 3) return '.';
+        return prev + '.';
+      });
+    }, 500);
+  }, []);
+
+  // Stop thinking animation with proper cleanup
+  const stopThinking = useCallback(() => {
+    console.log('Stopping thinking animation');
+    
+    if (thinkingIntervalRef.current) {
+      clearInterval(thinkingIntervalRef.current);
+      thinkingIntervalRef.current = null;
+    }
+    if (dotsIntervalRef.current) {
+      clearInterval(dotsIntervalRef.current);
+      dotsIntervalRef.current = null;
+    }
+    
     setIsThinking(false);
-    setThinkingIndex(0);
+    setThinkingMessage(thinkingMessages[0]);
     setDots('');
     setThinkingSessionId(null);
-  };
+    setInputDisabled(null);
+    thinkingIndexRef.current = 0;
+  }, []);
 
-  // Handle sending message
-  const handleSendMessage = async (
+  // Handle sending message with proper session tracking
+  const handleSendMessage = useCallback(async (
     message: string,
     file?: File,
     sessionId?: string
   ) => {
-    const id = sessionId || currentSession?.id;
-    if (!id) return;
+    const id = sessionId || currentSessionIdRef.current;
+    if (!id) {
+      console.error('No session ID available for sending message');
+      return;
+    }
 
-    // Add user message
+    console.log('Sending message to session:', id);
+    
+    // Add user message to the current session
     addMessage({
       role: "user",
       content: message,
@@ -167,26 +230,42 @@ const ChatContent = () => {
     try {
       // Send message to API
       const response = await chatApi.sendMessage(message, id);
-
-      // Add assistant response
-      addMessage({
-        role: "assistant",
-        content: response.message,
-      });
+      console.log('Received response for session:', id);
+      
+      // Check if we're still in the same session using ref (avoids closure issues)
+      if (currentSessionIdRef.current === id) {
+        console.log('Adding assistant response to current session');
+        addMessage({
+          role: "assistant",
+          content: response.message,
+        });
+      } else {
+        console.log('User switched sessions, response not displayed');
+      }
     } catch (error) {
       console.error("Error sending message:", error);
-      addMessage({
-        role: "assistant",
-        content: "I'm sorry, I encountered an error. Please try again.",
-      });
+      
+      // Check if we're still in the same session
+      if (currentSessionIdRef.current === id) {
+        addMessage({
+          role: "assistant",
+          content: "I'm sorry, I encountered an error. Please try again.",
+        });
+      }
     } finally {
-      // Stop thinking animation
-      stopThinking();
+      // Stop thinking animation only if this is the current thinking session
+      // Use the ref instead of state to avoid stale closure
+      if (thinkingSessionIdRef.current === id) {
+        stopThinking();
+      }
     }
-  };
+  }, [addMessage, startThinking, stopThinking]);
 
   // Check if thinking message should be shown for current session
   const showThinkingMessage = isThinking && thinkingSessionId === currentSession?.id;
+
+  // Check if input should be disabled for the current session
+  const isInputDisabled = inputDisabled === currentSession?.id;
 
   return (
     <div className="flex h-screen flex-col md:flex-row">
@@ -216,7 +295,7 @@ const ChatContent = () => {
               {showThinkingMessage && (
                 <div className="flex justify-start p-2">
                   <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
-                    <span>{thinkingMessages[thinkingIndex]}</span>
+                    <span>{thinkingMessage}</span>
                     <span className="min-w-[12px]">{dots}</span>
                   </div>
                 </div>
@@ -227,11 +306,11 @@ const ChatContent = () => {
         </div>
 
         {/* Input */}
-        <div className="sticky bottom-0 bg-white border-t p-2 md:p-4">
+        <div className="sticky bottom-20 bg-white border-t p-2 md:p-4">
           <div className="max-w-4xl mx-auto w-full">
             <ChatInput 
               onSendMessage={handleSendMessage} 
-              isLoading={isLoading || isThinking} 
+              isLoading={isInputDisabled} 
             />
           </div>
         </div>
