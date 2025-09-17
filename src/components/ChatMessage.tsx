@@ -10,6 +10,7 @@ interface ChatMessageProps {
 
 export const ChatMessage = ({ message }: ChatMessageProps) => {
   const isUser = message.role === 'user';
+  console.log(message)
 
   return (
     <div
