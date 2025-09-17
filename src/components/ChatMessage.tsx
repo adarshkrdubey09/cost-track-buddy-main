@@ -19,7 +19,7 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
           ? 'bg-muted/40 border-primary/20' 
           : 'bg-background border-border'
         }`}
-    >
+    > 
       {/* Avatar */}
       <Avatar className="w-7 h-7 xs:w-8 xs:h-8 sm:w-10 sm:h-10 flex-shrink-0">
         <AvatarFallback
