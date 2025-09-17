@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo, } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { ChatProvider, useChatContext } from '@/contexts/ChatContext';
@@ -7,7 +7,6 @@ import { ChatMessage } from '@/components/ChatMessage';
 import { ChatInput } from '@/components/ChatInput';
 import { WelcomeHeader } from '@/components/WelcomeHeader';
 import { chatApi } from '@/utils/chatApi';
-import { ReactDOM } from 'react';
 import React from 'react';
 
 const thinkingMessages = [
@@ -21,8 +20,18 @@ const thinkingMessages = [
 // Memoized ChatMessage component to prevent unnecessary re-renders
 const MemoizedChatMessage = React.memo(ChatMessage);
 
+// Loading component for session transitions
+const SessionLoading = () => (
+  <div className="flex items-center justify-center h-full">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+      <p className="mt-4 text-gray-600">Loading conversation...</p>
+    </div>
+  </div>
+);
+
 const ChatContent = () => {
-  const { currentSession, setMessages, addMessage } = useChatContext();
+  const { currentSession, setMessages, addMessage, sessions } = useChatContext();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -36,6 +45,7 @@ const ChatContent = () => {
   const [inputDisabled, setInputDisabled] = useState<string | null>(null);
   const [visibleMessages, setVisibleMessages] = useState<any[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [sessionTransition, setSessionTransition] = useState(false);
 
   const thinkingIntervalRef = useRef<number | null>(null);
   const dotsIntervalRef = useRef<number | null>(null);
@@ -45,8 +55,9 @@ const ChatContent = () => {
   const thinkingSessionIdRef = useRef<string | null>(null);
   const isMountedRef = useRef<boolean>(true);
   const scrollDebounceRef = useRef<NodeJS.Timeout | null>(null);
-  const messageBatchSize = 50; // Number of messages to render at once
+  const messageBatchSize = 50;
   const lastScrollTopRef = useRef<number>(0);
+  const prevSessionIdRef = useRef<string | null>(null);
 
   // Update refs when state changes
   useEffect(() => {
@@ -86,9 +97,35 @@ const ChatContent = () => {
     };
   }, []);
 
+  // Detect session changes and show loading state
+  useEffect(() => {
+    if (currentSession?.id !== prevSessionIdRef.current) {
+      // Only show transition if we're switching to a different session (not initial load)
+      if (prevSessionIdRef.current !== null && currentSession?.id) {
+        setSessionTransition(true);
+        
+        // Hide transition after a short delay or when messages load
+        const timer = setTimeout(() => {
+          if (isMountedRef.current) {
+            setSessionTransition(false);
+          }
+        }, 800);
+        
+        return () => clearTimeout(timer);
+      }
+      
+      prevSessionIdRef.current = currentSession?.id || null;
+    }
+  }, [currentSession?.id]);
+
   // Virtualized message rendering - only show a subset of messages
   useEffect(() => {
     if (!currentSession?.messages) return;
+    
+    // Clear transition state once messages are available
+    if (sessionTransition && currentSession.messages.length > 0) {
+      setSessionTransition(false);
+    }
     
     // For small message counts, show all messages
     if (currentSession.messages.length <= messageBatchSize) {
@@ -101,7 +138,7 @@ const ChatContent = () => {
     const recentMessages = currentSession.messages.slice(-messageBatchSize);
     setVisibleMessages(recentMessages);
     setHasMoreMessages(currentSession.messages.length > messageBatchSize);
-  }, [currentSession?.messages]);
+  }, [currentSession?.messages, sessionTransition]);
 
   // Debounced scroll handler
   const handleScroll = useCallback(() => {
@@ -156,53 +193,59 @@ const ChatContent = () => {
     }
   }, [visibleMessages, isThinking, userAtBottom]);
 
+  // Optimized message fetching with caching
+  const fetchMessages = useCallback(async (sessionId: string) => {
+    if (hasFetchedRef.current.has(sessionId)) {
+      return; // Already fetched, no need to fetch again
+    }
+
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(
+        `https://ai.rosmerta.dev/chat/conversations/${sessionId}/messages`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+      const data = await response.json();
+
+      setMessages(
+        data.map((msg: any) => ({
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+          created_at: msg.created_at,
+        }))
+      );
+      
+      hasFetchedRef.current.add(sessionId);
+    } catch (error) {
+      console.error("Failed to fetch messages:", error);
+      hasFetchedRef.current.delete(sessionId);
+    } finally {
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
+    }
+  }, [setMessages]);
+
   // Fetch messages when a conversation is selected
   useEffect(() => {
-    const fetchMessages = async () => {
-      if (!currentSession || hasFetchedRef.current.has(currentSession.id)) {
-        return;
-      }
-
-      setIsLoading(true);
-      try {
-        const token = localStorage.getItem("access_token");
-        const response = await fetch(
-          `https://ai.rosmerta.dev/chat/conversations/${currentSession.id}/messages`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-          }
-        );
-
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-        const data = await response.json();
-
-        setMessages(
-          data.map((msg: any) => ({
-            id: msg.id,
-            role: msg.role,
-            content: msg.content,
-            created_at: msg.created_at,
-          }))
-        );
-        
-        hasFetchedRef.current.add(currentSession.id);
-      } catch (error) {
-        console.error("Failed to fetch messages:", error);
-        hasFetchedRef.current.delete(currentSession.id);
-      } finally {
-        if (isMountedRef.current) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchMessages();
-  }, [currentSession, setMessages]);
+    if (!currentSession) return;
+    
+    // Only fetch if we haven't already fetched this session's messages
+    if (!hasFetchedRef.current.has(currentSession.id)) {
+      fetchMessages(currentSession.id);
+    }
+  }, [currentSession, fetchMessages]);
 
   // Start thinking animation with proper cleanup
   const startThinking = useCallback((sessionId: string) => {
@@ -351,7 +394,9 @@ const ChatContent = () => {
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto p-4 pb-28"
         >
-          {shouldShowWelcome ? (
+          {sessionTransition ? (
+            <SessionLoading />
+          ) : shouldShowWelcome ? (
             <div className="flex h-full items-center justify-center">
               <WelcomeHeader />
             </div>
@@ -385,7 +430,7 @@ const ChatContent = () => {
           <div className="max-w-4xl mx-auto w-full">
             <ChatInput 
               onSendMessage={handleSendMessage} 
-              isLoading={isInputDisabled} 
+              isLoading={isInputDisabled || sessionTransition} 
             />
           </div>
         </div>
