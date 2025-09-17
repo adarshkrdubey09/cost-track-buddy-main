@@ -6,6 +6,7 @@ export interface ChatMessage {
   attachments?: File[];
 }
 
+
 export interface ChatSession {
   id: string;
   title: string;

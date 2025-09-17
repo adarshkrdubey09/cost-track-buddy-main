@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo, } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { ChatProvider, useChatContext } from '@/contexts/ChatContext';
@@ -7,6 +7,8 @@ import { ChatMessage } from '@/components/ChatMessage';
 import { ChatInput } from '@/components/ChatInput';
 import { WelcomeHeader } from '@/components/WelcomeHeader';
 import { chatApi } from '@/utils/chatApi';
+import { ReactDOM } from 'react';
+import React from 'react';
 
 const thinkingMessages = [
   "Thinking about your question…",
@@ -15,6 +17,9 @@ const thinkingMessages = [
   "Let me work this out for you…",
   "Almost there, just a moment…"
 ];
+
+// Memoized ChatMessage component to prevent unnecessary re-renders
+const MemoizedChatMessage = React.memo(ChatMessage);
 
 const ChatContent = () => {
   const { currentSession, setMessages, addMessage } = useChatContext();
@@ -29,6 +34,8 @@ const ChatContent = () => {
   const [userAtBottom, setUserAtBottom] = useState(true);
   const [thinkingSessionId, setThinkingSessionId] = useState<string | null>(null);
   const [inputDisabled, setInputDisabled] = useState<string | null>(null);
+  const [visibleMessages, setVisibleMessages] = useState<any[]>([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
 
   const thinkingIntervalRef = useRef<number | null>(null);
   const dotsIntervalRef = useRef<number | null>(null);
@@ -37,6 +44,9 @@ const ChatContent = () => {
   const thinkingIndexRef = useRef<number>(0);
   const thinkingSessionIdRef = useRef<string | null>(null);
   const isMountedRef = useRef<boolean>(true);
+  const scrollDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const messageBatchSize = 50; // Number of messages to render at once
+  const lastScrollTopRef = useRef<number>(0);
 
   // Update refs when state changes
   useEffect(() => {
@@ -49,13 +59,16 @@ const ChatContent = () => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      if (scrollDebounceRef.current) {
+        clearTimeout(scrollDebounceRef.current);
+      }
     };
   }, []);
 
   // Redirect if not authenticated
   useEffect(() => {
     if (!localStorage.getItem("isAuthenticated")) {
-      navigate("/login",{ relative: 'route' });
+      navigate("/login", { relative: 'route' });
     }
   }, [navigate]);
 
@@ -73,33 +86,85 @@ const ChatContent = () => {
     };
   }, []);
 
-  // Detect user scroll position
-  const handleScroll = useCallback(() => {
-    if (!scrollContainerRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+  // Virtualized message rendering - only show a subset of messages
+  useEffect(() => {
+    if (!currentSession?.messages) return;
+    
+    // For small message counts, show all messages
+    if (currentSession.messages.length <= messageBatchSize) {
+      setVisibleMessages(currentSession.messages);
+      setHasMoreMessages(false);
+      return;
+    }
 
-    // If within 50px of bottom, consider user "at bottom"
-    setUserAtBottom(scrollHeight - scrollTop - clientHeight < 50);
-  }, []);
+    // For large message counts, only show the most recent messages initially
+    const recentMessages = currentSession.messages.slice(-messageBatchSize);
+    setVisibleMessages(recentMessages);
+    setHasMoreMessages(currentSession.messages.length > messageBatchSize);
+  }, [currentSession?.messages]);
+
+  // Debounced scroll handler
+  const handleScroll = useCallback(() => {
+    if (!scrollContainerRef.current || !currentSession?.messages) return;
+    
+    // Debounce scroll events to improve performance
+    if (scrollDebounceRef.current) {
+      clearTimeout(scrollDebounceRef.current);
+    }
+
+    scrollDebounceRef.current = setTimeout(() => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current!;
+      
+      // If within 50px of bottom, consider user "at bottom"
+      setUserAtBottom(scrollHeight - scrollTop - clientHeight < 50);
+
+      // Load more messages when scrolling to the top (for virtualized rendering)
+      if (scrollTop < 100 && hasMoreMessages && currentSession.messages.length > messageBatchSize) {
+        const currentScrollPosition = scrollTop;
+        const currentMessages = currentSession.messages;
+        const currentVisibleCount = visibleMessages.length;
+        
+        // Load more older messages
+        const startIndex = Math.max(0, currentMessages.length - currentVisibleCount - messageBatchSize);
+        const newVisibleMessages = currentMessages.slice(startIndex);
+        
+        setVisibleMessages(newVisibleMessages);
+        
+        // Restore scroll position after updating messages
+        setTimeout(() => {
+          if (scrollContainerRef.current) {
+            const newScrollHeight = scrollContainerRef.current.scrollHeight;
+            const scrollDifference = newScrollHeight - scrollHeight;
+            scrollContainerRef.current.scrollTop = currentScrollPosition + scrollDifference;
+          }
+        }, 0);
+
+        // Check if we've loaded all messages
+        if (startIndex === 0) {
+          setHasMoreMessages(false);
+        }
+      }
+
+      lastScrollTopRef.current = scrollTop;
+    }, 50);
+  }, [currentSession?.messages, visibleMessages.length, hasMoreMessages]);
 
   // Auto scroll only if user is at bottom
   useEffect(() => {
     if (userAtBottom && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [currentSession?.messages, isThinking, userAtBottom]);
+  }, [visibleMessages, isThinking, userAtBottom]);
 
-  // Fetch messages when a conversation is selected - FIXED TO PREVENT REPEATED CALLS
+  // Fetch messages when a conversation is selected
   useEffect(() => {
     const fetchMessages = async () => {
-      // Early return conditions to prevent unnecessary calls
       if (!currentSession || hasFetchedRef.current.has(currentSession.id)) {
         return;
       }
 
       setIsLoading(true);
       try {
-        console.log('Fetching messages for session:', currentSession.id);
         const token = localStorage.getItem("access_token");
         const response = await fetch(
           `https://ai.rosmerta.dev/chat/conversations/${currentSession.id}/messages`,
@@ -125,12 +190,9 @@ const ChatContent = () => {
           }))
         );
         
-        // Mark this session as fetched
         hasFetchedRef.current.add(currentSession.id);
-        console.log('Messages fetched successfully for session:', currentSession.id);
       } catch (error) {
         console.error("Failed to fetch messages:", error);
-        // Remove from fetched set on error to allow retry
         hasFetchedRef.current.delete(currentSession.id);
       } finally {
         if (isMountedRef.current) {
@@ -140,13 +202,10 @@ const ChatContent = () => {
     };
 
     fetchMessages();
-  }, [currentSession, setMessages]); // Only depend on currentSession and setMessages
+  }, [currentSession, setMessages]);
 
   // Start thinking animation with proper cleanup
   const startThinking = useCallback((sessionId: string) => {
-    console.log('Starting thinking for session:', sessionId);
-    
-    // Clear any existing intervals first
     if (thinkingIntervalRef.current) {
       clearInterval(thinkingIntervalRef.current);
       thinkingIntervalRef.current = null;
@@ -184,8 +243,6 @@ const ChatContent = () => {
 
   // Stop thinking animation with proper cleanup
   const stopThinking = useCallback(() => {
-    console.log('Stopping thinking animation');
-    
     if (thinkingIntervalRef.current) {
       clearInterval(thinkingIntervalRef.current);
       thinkingIntervalRef.current = null;
@@ -196,76 +253,88 @@ const ChatContent = () => {
     }
     
     setIsThinking(false);
-    setThinkingMessage(thinkingMessages[0]);
-    setDots('');
     setThinkingSessionId(null);
     setInputDisabled(null);
-    thinkingIndexRef.current = 0;
   }, []);
 
-  // Handle sending message with proper session tracking
+  // Throttled message sending to prevent rapid API calls
+  const sendMessageThrottled = useRef(
+    (() => {
+      let lastCallTime = 0;
+      const throttleDelay = 1000; // 1 second between messages
+      
+      return async (message: string, id: string, addMessage: any, startThinking: any, stopThinking: any) => {
+        const now = Date.now();
+        if (now - lastCallTime < throttleDelay) {
+          console.log('Message throttled');
+          return;
+        }
+        lastCallTime = now;
+
+        // Start thinking animation
+        startThinking(id);
+
+        try {
+          const response = await chatApi.sendMessage(message, id);
+          
+          if (currentSessionIdRef.current === id) {
+            addMessage({
+              role: "assistant",
+              content: response.message,
+            });
+          }
+        } catch (error) {
+          console.error("Error sending message:", error);
+          
+          if (currentSessionIdRef.current === id) {
+            addMessage({
+              role: "assistant",
+              content: "I'm sorry, I encountered an error. Please try again.",
+            });
+          }
+        } finally {
+          if (thinkingSessionIdRef.current === id) {
+            stopThinking();
+          }
+        }
+      };
+    })()
+  );
+
+  // Handle sending message
   const handleSendMessage = useCallback(async (
     message: string,
     file?: File,
     sessionId?: string
   ) => {
     const id = sessionId || currentSessionIdRef.current;
-    if (!id) {
-      console.error('No session ID available for sending message');
-      return;
-    }
+    if (!id) return;
 
-    console.log('Sending message to session:', id);
-    
-    // Add user message to the current session
     addMessage({
       role: "user",
       content: message,
       attachments: file ? [file] : undefined,
     });
 
-    // Start thinking animation
-    startThinking(id);
-
-    try {
-      // Send message to API
-      const response = await chatApi.sendMessage(message, id);
-      console.log('Received response for session:', id);
-      
-      // Check if we're still in the same session using ref (avoids closure issues)
-      if (currentSessionIdRef.current === id) {
-        console.log('Adding assistant response to current session');
-        addMessage({
-          role: "assistant",
-          content: response.message,
-        });
-      } else {
-        console.log('User switched sessions, response not displayed');
-      }
-    } catch (error) {
-      console.error("Error sending message:", error);
-      
-      // Check if we're still in the same session
-      if (currentSessionIdRef.current === id) {
-        addMessage({
-          role: "assistant",
-          content: "I'm sorry, I encountered an error. Please try again.",
-        });
-      }
-    } finally {
-      // Stop thinking animation only if this is the current thinking session
-      // Use the ref instead of state to avoid stale closure
-      if (thinkingSessionIdRef.current === id) {
-        stopThinking();
-      }
-    }
+    // Use throttled message sending
+    sendMessageThrottled.current(message, id, addMessage, startThinking, stopThinking);
   }, [addMessage, startThinking, stopThinking]);
 
-  // Check if thinking message should be shown for current session
-  const showThinkingMessage = isThinking && thinkingSessionId === currentSession?.id;
+  // Memoized values for performance
+  const showThinkingMessage = useMemo(() => 
+    isThinking && thinkingSessionId === currentSession?.id, 
+    [isThinking, thinkingSessionId, currentSession?.id]
+  );
 
-  // Check if input should be disabled for the current session
-  const isInputDisabled = inputDisabled === currentSession?.id;
+  const isInputDisabled = useMemo(() => 
+    inputDisabled === currentSession?.id, 
+    [inputDisabled, currentSession?.id]
+  );
+
+  const shouldShowWelcome = useMemo(() => 
+    !currentSession || (currentSession.messages.length === 0 && !showThinkingMessage),
+    [currentSession, showThinkingMessage]
+  );
 
   return (
     <div className="flex h-screen flex-col md:flex-row">
@@ -282,14 +351,20 @@ const ChatContent = () => {
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto p-4 pb-28"
         >
-          {!currentSession || (currentSession.messages.length === 0 && !showThinkingMessage) ? (
+          {shouldShowWelcome ? (
             <div className="flex h-full items-center justify-center">
               <WelcomeHeader />
             </div>
           ) : (
             <div className="max-w-4xl mx-auto space-y-2">
-              {currentSession.messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
+              {hasMoreMessages && (
+                <div className="text-center py-2 text-sm text-gray-500">
+                  {currentSession!.messages.length - visibleMessages.length} older messages not shown
+                </div>
+              )}
+              
+              {visibleMessages.map((message) => (
+                <MemoizedChatMessage key={message.id} message={message} />
               ))}
 
               {showThinkingMessage && (
