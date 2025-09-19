@@ -47,7 +47,7 @@ export default function Login() {
         description: `Welcome ${data.user.userfirstname} ${data.user.userlastname}`,
       });
 
-      navigate("/home");
+      navigate("/home",{ relative: 'route' });
     } catch (error) {
       toast({
         title: "Login failed",

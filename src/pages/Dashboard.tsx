@@ -15,7 +15,7 @@ export default function Dashboard() {
   useEffect(() => {
     // Check if user is authenticated
     if (!localStorage.getItem("isAuthenticated")) {
-      navigate("/login");
+      navigate("/login",{ relative: 'route' });
       return;
     }
 
@@ -116,7 +116,7 @@ export default function Dashboard() {
             {expenses.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-muted-foreground mb-4">No expenses recorded yet</div>
-                <Button onClick={() => navigate("/add-expense")}>
+                <Button onClick={() => {navigate("/add-expense",{ relative: 'route' })}}>
                   Add Your First Expense
                 </Button>
               </div>

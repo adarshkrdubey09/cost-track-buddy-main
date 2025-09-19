@@ -50,7 +50,7 @@ const clearSessionAndRedirect = (navigate: any) => {
   localStorage.removeItem("isAuthenticated");
     localStorage.removeItem("sessionExpired")
 
-  navigate("/login");
+  navigate("/login",{ relative: 'route' });
 };
 
 export default function ViewExpenses() {
@@ -208,7 +208,7 @@ const handleProceed = () => {
         <div className="space-y-6 px-4 py-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">View Expense Data</h1>
+              <h1 className="text-3xl font-bold text-foreground font-medium">View Expense Data</h1>
               <p className="text-muted-foreground">View & edit expense amounts in the table</p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -239,7 +239,7 @@ const handleProceed = () => {
     <Layout>
       <div className="max-w-3xl mx-auto px-4 py-6">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-foreground">View Expenses</h1>
+          <h1 className="text-3xl  text-foreground font-medium">View Expenses</h1>
           <p className="text-muted-foreground">Select period details to view data</p>
         </div>
 

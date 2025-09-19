@@ -13,21 +13,20 @@ import EditExpense from "./pages/EditExpense";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
-
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter basename="/expense">
         <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/home" element={<Home />} />
-          <Route path="/add-expense" element={<AddExpense />} />
-          <Route path="/view-expenses" element={<ViewExpenses />} />
-          <Route path="/edit-expense/:id" element={<EditExpense />} />
+          <Route index element={<Index />} /> 
+          <Route path="login" element={<Login />} />
+          <Route path="chat" element={<Chat />} />
+          <Route path="home" element={<Home />} />
+          <Route path="add-expense" element={<AddExpense />} />
+          <Route path="view-expenses" element={<ViewExpenses />} />
+          <Route path="edit-expense/:id" element={<EditExpense />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

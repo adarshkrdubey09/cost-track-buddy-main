@@ -14,11 +14,13 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { url } from "inspector";
 
 const navItems = [
-  { title: "New Chat", url: "/chat", icon: MessageSquare },
+  { title: "Chat", url: "/chat", icon: MessageSquare },
   { title: "Home", url: "/home", icon: Home },
   { title: "Add Expense", url: "/add-expense", icon: Plus },
+  {title:"View Expense" ,url:"/view-expenses",icon:LayoutDashboard}
 ];
 
 export function AppSidebar() {
@@ -30,12 +32,36 @@ export function AppSidebar() {
 
   const isActive = (path: string) => currentPath === path;
 
-  const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated");
-    localStorage.removeItem("userEmail");
-    localStorage.removeItem("userName");
-    navigate("/login");
-  };
+
+const handleLogout = async () => {
+  const token = localStorage.getItem("access_token"); // 🔑 fetch token
+
+  try {
+    if (token) {
+      await fetch("https://ai.rosmerta.dev/expense/api/auth/logout", {
+        method: "POST", // ✅ check if API needs POST or GET
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    }
+  } catch (error) {
+    console.error("Logout API failed:", error);
+  } finally {
+    // ✅ clear all local storage
+   localStorage.removeItem('access_token');
+localStorage.removeItem('isAuthenticated');
+localStorage.removeItem('userfirstname');
+localStorage.removeItem('userlastname');
+localStorage.removeItem('userloginname');
+
+
+    // ✅ navigate to login
+    navigate("/login",{ relative: 'route' });
+  }
+};
+
 
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "hover:bg-sidebar-accent/50";
@@ -47,7 +73,7 @@ export function AppSidebar() {
         {!isCollapsed && (
           <h1 
             className="text-lg font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent cursor-pointer hover:opacity-80"
-            onClick={() => navigate("/chat")}
+            onClick={() => {navigate("/chat",{ relative: 'route' })}}
           >
           <div className="flex justify-start items-center">
   <img
@@ -63,7 +89,7 @@ export function AppSidebar() {
         {isCollapsed && (
           <div 
             className="w-6 h-6 bg-gradient-to-r from-primary to-accent rounded cursor-pointer hover:opacity-80"
-            onClick={() => navigate("/chat")}
+            onClick={() => navigate("/chat",{ relative: 'route' })}
           ></div>
         )}
       </div>

@@ -15,7 +15,7 @@ export default function Home() {
   useEffect(() => {
     // Check if user is authenticated
     if (!localStorage.getItem("isAuthenticated")) {
-      navigate("/login");
+      navigate("/login",{ relative: 'route' });
       return;
     }
 
@@ -46,13 +46,13 @@ export default function Home() {
       <div className="space-y-8">
         {/* Header Section */}
         <div className="text-center px-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Home</h1>
+          <h2 className="text-2xl sm:text-3xl font-medium text-foreground">Home</h2>
           <p className="text-sm sm:text-base text-muted-foreground">Manage and track your expenses</p>
         </div>
 
         {/* Main Options */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 max-w-2xl mx-auto px-4">
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/add-expense")}>
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => {navigate("/add-expense",{ relative: 'route' })}}>
             <CardHeader className="text-center pb-4">
               <div className="mx-auto mb-4 w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
                 <Plus className="h-8 w-8 text-primary" />
@@ -68,7 +68,7 @@ export default function Home() {
             // For now, we'll show a simple list. Later we can create a dedicated view page
             
             // Navigate to view expenses page
-            navigate("/view-expenses");
+            navigate("/view-expenses",{ relative: 'route' });
           }}>
             <CardHeader className="text-center pb-4">
               <div className="mx-auto mb-4 w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center">

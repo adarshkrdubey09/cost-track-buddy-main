@@ -10,6 +10,7 @@ interface ChatMessageProps {
 
 export const ChatMessage = ({ message }: ChatMessageProps) => {
   const isUser = message.role === 'user';
+  console.log(message)
 
   return (
     <div
@@ -18,7 +19,7 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
           ? 'bg-muted/40 border-primary/20' 
           : 'bg-background border-border'
         }`}
-    >
+    > 
       {/* Avatar */}
       <Avatar className="w-7 h-7 xs:w-8 xs:h-8 sm:w-10 sm:h-10 flex-shrink-0">
         <AvatarFallback
@@ -51,26 +52,26 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
         </div>
 
         {/* Message Content */}
-        <div className="prose prose-xs xs:prose-sm sm:prose-base max-w-none text-foreground overflow-x-auto break-words">
+        <div className="prose prose-xs xs:prose-sm sm:prose-base max-w-full text-foreground break-words overflow-hidden">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
               table: ({ node, ...props }) => (
-                <div className="overflow-x-auto my-1 xs:my-2">
+                <div className="overflow-x-auto my-1 xs:my-2 max-w-full">
                   <table
-                    className="border border-collapse border-gray-300 w-full text-xs xs:text-sm sm:text-base"
+                    className="border border-collapse border-gray-300 w-full text-xs xs:text-sm sm:text-base max-w-full table-fixed"
                     {...props}
                   />
                 </div>
               ),
               th: ({ node, ...props }) => (
                 <th
-                  className="border border-gray-300 bg-muted px-2 py-1 text-left font-medium"
+                  className="border border-gray-300 bg-muted px-2 py-1 text-left font-medium break-words max-w-[120px]"
                   {...props}
                 />
               ),
               td: ({ node, ...props }) => (
-                <td className="border border-gray-300 px-2 py-1" {...props} />
+                <td className="border border-gray-300 px-2 py-1 break-words max-w-[120px]" {...props} />
               ),
               h1: ({ node, ...props }) => (
                 <h1 className="text-lg xs:text-xl sm:text-2xl my-1 xs:my-2" {...props} />
@@ -80,6 +81,15 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
               ),
               h3: ({ node, ...props }) => (
                 <h3 className="text-sm xs:text-base sm:text-lg my-1 xs:my-2" {...props} />
+              ),
+              p: ({ node, ...props }) => (
+                <p className="break-words whitespace-pre-wrap" {...props} />
+              ),
+              pre: ({ node, ...props }) => (
+                <pre className="overflow-x-auto max-w-full text-xs bg-muted p-2 rounded my-1" {...props} />
+              ),
+              code: ({ node, ...props }) => (
+                <code className="break-words bg-muted px-1 rounded text-xs" {...props} />
               ),
             }}
           >

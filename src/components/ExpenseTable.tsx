@@ -95,7 +95,7 @@ export function ExpenseTable({
     localStorage.removeItem("userfirstname");
     localStorage.removeItem("userlastname");
     localStorage.removeItem("isAuthenticated");
-    navigate("/login");
+    navigate("/login",{ relative: 'route' });
   };
 
   useEffect(() => {

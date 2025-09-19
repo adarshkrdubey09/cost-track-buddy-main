@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { ChatProvider, useChatContext } from '@/contexts/ChatContext';
@@ -7,6 +7,7 @@ import { ChatMessage } from '@/components/ChatMessage';
 import { ChatInput } from '@/components/ChatInput';
 import { WelcomeHeader } from '@/components/WelcomeHeader';
 import { chatApi } from '@/utils/chatApi';
+import React from 'react';
 
 const thinkingMessages = [
   "Thinking about your question…",
@@ -16,92 +17,222 @@ const thinkingMessages = [
   "Almost there, just a moment…"
 ];
 
+// Memoized ChatMessage component to prevent unnecessary re-renders
+const MemoizedChatMessage = React.memo(ChatMessage);
+
+// Loading component for session transitions
+const SessionLoading = () => (
+  <div className="flex items-center justify-center h-full">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+      <p className="mt-4 text-gray-600">Loading conversation...</p>
+    </div>
+  </div>
+);
+
 const ChatContent = () => {
-  const { currentSession, setMessages, addMessage } = useChatContext();
+  const { 
+    currentSession, 
+    addMessage, 
+    loadMoreMessages, 
+    isLoadingMessages, 
+    hasMoreMessages,
+    loadSession,
+    sessions
+  } = useChatContext();
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const [isLoading, setIsLoading] = useState(false);   // for fetching
-  const [isThinking, setIsThinking] = useState(false); // for assistant typing
-  const [thinkingIndex, setThinkingIndex] = useState(0);
-  const [dots, setDots] = useState(1);
+  const [isThinking, setIsThinking] = useState(false);
+  const [thinkingMessage, setThinkingMessage] = useState(thinkingMessages[0]);
+  const [dots, setDots] = useState('');
+  const [userAtBottom, setUserAtBottom] = useState(true);
+  const [thinkingSessionId, setThinkingSessionId] = useState<string | null>(null);
+  const [inputDisabled, setInputDisabled] = useState<string | null>(null);
+  const [sessionTransition, setSessionTransition] = useState(false);
+  const [isInitialScrollDone, setIsInitialScrollDone] = useState(false);
 
   const thinkingIntervalRef = useRef<number | null>(null);
   const dotsIntervalRef = useRef<number | null>(null);
+  const currentSessionIdRef = useRef<string | null>(null);
+  const thinkingIndexRef = useRef<number>(0);
+  const thinkingSessionIdRef = useRef<string | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+  const scrollDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const lastScrollTopRef = useRef<number>(0);
+  const prevSessionIdRef = useRef<string | null>(null);
+  const isInitialLoadRef = useRef<boolean>(true);
+  const isScrollingToLoadMoreRef = useRef<boolean>(false);
+  const previousMessagesLengthRef = useRef<number>(0);
+  const sessionCacheRef = useRef<Map<string, { messages: any[]; hasMore: boolean }>>(new Map());
+
+  // Update refs when state changes
+  useEffect(() => {
+    currentSessionIdRef.current = currentSession?.id || null;
+    thinkingSessionIdRef.current = thinkingSessionId;
+  }, [currentSession, thinkingSessionId]);
+
+  // Set mounted ref for cleanup
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (scrollDebounceRef.current) {
+        clearTimeout(scrollDebounceRef.current);
+      }
+      if (thinkingIntervalRef.current) {
+        clearInterval(thinkingIntervalRef.current);
+      }
+      if (dotsIntervalRef.current) {
+        clearInterval(dotsIntervalRef.current);
+      }
+    };
+  }, []);
 
   // Redirect if not authenticated
   useEffect(() => {
     if (!localStorage.getItem("isAuthenticated")) {
-      navigate("/login");
+      navigate("/login", { relative: 'route' });
     }
   }, [navigate]);
 
-  // Scroll to bottom whenever messages or thinking index change
+  // Cache session messages when switching away
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [currentSession?.messages, thinkingIndex, dots]);
+    if (prevSessionIdRef.current && currentSession) {
+      // Cache the current session's messages before switching
+      sessionCacheRef.current.set(prevSessionIdRef.current, {
+        messages: currentSession.messages,
+        hasMore: hasMoreMessages
+      });
+    }
+  }, [currentSession, hasMoreMessages]);
 
-  // Fetch messages when a conversation is selected
+  // Detect session changes and handle message loading
   useEffect(() => {
-    const fetchMessages = async () => {
-      if (!currentSession) return;
-
-      setIsLoading(true);
-      try {
-        const token = localStorage.getItem("access_token");
-        const response = await fetch(
-          `https://ai.rosmerta.dev/chat/conversations/${currentSession.id}/messages`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { "Authorization": `Bearer ${token}` } : {}),
-            },
+    if (currentSession?.id !== prevSessionIdRef.current) {
+      const previousSessionId = prevSessionIdRef.current;
+      
+      if (previousSessionId !== null && currentSession?.id) {
+        setSessionTransition(true);
+        
+        // Check if we have cached messages for this session
+        const cachedSession = sessionCacheRef.current.get(currentSession.id);
+        
+        if (cachedSession && cachedSession.messages.length > 0) {
+          // If we have cached messages, use them immediately
+          setTimeout(() => {
+            if (isMountedRef.current) {
+              setSessionTransition(false);
+              // Scroll to bottom after a short delay to ensure messages are rendered
+              setTimeout(() => {
+                if (messagesEndRef.current && isMountedRef.current) {
+                  messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+                  setUserAtBottom(true);
+                }
+              }, 100);
+            }
+          }, 300);
+        } else {
+          // No cached messages, show loading for longer
+          const timer = setTimeout(() => {
+            if (isMountedRef.current) {
+              setSessionTransition(false);
+              // Scroll to bottom after messages load
+              setTimeout(() => {
+                if (messagesEndRef.current && isMountedRef.current) {
+                  messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+                  setUserAtBottom(true);
+                }
+              }, 100);
+            }
+          }, 800);
+          
+          return () => clearTimeout(timer);
+        }
+      } else if (currentSession?.id) {
+        // Initial load of a session
+        setTimeout(() => {
+          if (messagesEndRef.current && isMountedRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+            setUserAtBottom(true);
           }
-        );
-
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-        const data = await response.json();
-
-        setMessages(
-          data.map((msg: any) => ({
-            id: msg.id,
-            role: msg.role,
-            content: msg.content,
-            created_at: msg.created_at,
-          }))
-        );
-      } catch (error) {
-        console.error("Failed to fetch messages:", error);
-      } finally {
-        setIsLoading(false);
-        setThinkingIndex(0);
+        }, 100);
       }
-    };
+      
+      prevSessionIdRef.current = currentSession?.id || null;
+      isInitialLoadRef.current = false;
+      setIsInitialScrollDone(false);
+    }
+  }, [currentSession?.id]);
 
-    fetchMessages();
-  }, [currentSession, setMessages]);
+  // Auto scroll to bottom on initial load and new messages
+  useEffect(() => {
+    if (!currentSession?.messages.length) return;
 
-  // Start thinking
-  const startThinking = () => {
-    setThinkingIndex(0);
-    setDots(1);
-    setIsThinking(true);
+    const isNewMessageAdded = currentSession.messages.length > previousMessagesLengthRef.current;
+    const isInitialLoad = previousMessagesLengthRef.current === 0;
 
-    if (thinkingIntervalRef.current) clearInterval(thinkingIntervalRef.current);
-    thinkingIntervalRef.current = window.setInterval(() => {
-      setThinkingIndex(prev => (prev + 1) % thinkingMessages.length);
-    }, 4000);
+    if ((isNewMessageAdded && userAtBottom) || (isInitialLoad && !isInitialScrollDone)) {
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        if (messagesEndRef.current && isMountedRef.current) {
+          messagesEndRef.current.scrollIntoView({ 
+            behavior: isInitialLoad ? 'auto' : 'smooth' 
+          });
+          if (isInitialLoad) {
+            setIsInitialScrollDone(true);
+          }
+        }
+      }, 50);
+    }
 
-    if (dotsIntervalRef.current) clearInterval(dotsIntervalRef.current);
-    dotsIntervalRef.current = window.setInterval(() => {
-      setDots(prev => (prev >= 3 ? 1 : prev + 1));
-    }, 500);
-  };
+    previousMessagesLengthRef.current = currentSession.messages.length;
+  }, [currentSession?.messages, userAtBottom, isInitialScrollDone]);
 
-  // Stop thinking
-  const stopThinking = () => {
+  // Optimized scroll handler with pagination
+  const handleScroll = useCallback(() => {
+    if (!scrollContainerRef.current || !currentSession?.messages || isLoadingMessages) return;
+    
+    // Debounce scroll events to improve performance
+    if (scrollDebounceRef.current) {
+      clearTimeout(scrollDebounceRef.current);
+    }
+
+    scrollDebounceRef.current = setTimeout(() => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current!;
+      
+      // If within 100px of bottom, consider user "at bottom"
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
+      setUserAtBottom(isAtBottom);
+
+      // Load more messages when scrolling to the top and there are more to load
+      if (scrollTop < 200 && hasMoreMessages && !isLoadingMessages && !isScrollingToLoadMoreRef.current) {
+        isScrollingToLoadMoreRef.current = true;
+        
+        // Store current scroll position and height
+        const currentScrollTop = scrollTop;
+        const currentScrollHeight = scrollHeight;
+        
+        loadMoreMessages().then(() => {
+          // After loading, adjust scroll position to maintain user's view
+          if (scrollContainerRef.current) {
+            const newScrollHeight = scrollContainerRef.current.scrollHeight;
+            const heightDifference = newScrollHeight - currentScrollHeight;
+            scrollContainerRef.current.scrollTop = currentScrollTop + heightDifference;
+          }
+        }).finally(() => {
+          isScrollingToLoadMoreRef.current = false;
+        });
+      }
+
+      lastScrollTopRef.current = scrollTop;
+    }, 150);
+  }, [currentSession?.messages, isLoadingMessages, hasMoreMessages, loadMoreMessages]);
+
+  // Start thinking animation with proper cleanup
+  const startThinking = useCallback((sessionId: string) => {
     if (thinkingIntervalRef.current) {
       clearInterval(thinkingIntervalRef.current);
       thinkingIntervalRef.current = null;
@@ -110,47 +241,143 @@ const ChatContent = () => {
       clearInterval(dotsIntervalRef.current);
       dotsIntervalRef.current = null;
     }
+
+    setThinkingSessionId(sessionId);
+    setInputDisabled(sessionId);
+    setThinkingMessage(thinkingMessages[0]);
+    setDots('.');
+    setIsThinking(true);
+    thinkingIndexRef.current = 0;
+
+    // Cycle through thinking messages
+    thinkingIntervalRef.current = window.setInterval(() => {
+      if (!isMountedRef.current) return;
+      
+      thinkingIndexRef.current = (thinkingIndexRef.current + 1) % thinkingMessages.length;
+      setThinkingMessage(thinkingMessages[thinkingIndexRef.current]);
+    }, 4000);
+
+    // Animate the dots
+    dotsIntervalRef.current = window.setInterval(() => {
+      if (!isMountedRef.current) return;
+      
+      setDots((prev) => {
+        if (prev.length >= 3) return '.';
+        return prev + '.';
+      });
+    }, 500);
+  }, []);
+
+  // Stop thinking animation with proper cleanup
+  const stopThinking = useCallback(() => {
+    if (thinkingIntervalRef.current) {
+      clearInterval(thinkingIntervalRef.current);
+      thinkingIntervalRef.current = null;
+    }
+    if (dotsIntervalRef.current) {
+      clearInterval(dotsIntervalRef.current);
+      dotsIntervalRef.current = null;
+    }
+    
     setIsThinking(false);
-    setThinkingIndex(0);
-    setDots(1);
-  };
+    setThinkingSessionId(null);
+    setInputDisabled(null);
+  }, []);
+
+  // Throttled message sending to prevent rapid API calls
+  const sendMessageThrottled = useRef(
+    (() => {
+      let lastCallTime = 0;
+      const throttleDelay = 1000; // 1 second between messages
+      
+      return async (message: string, id: string, addMessage: any, startThinking: any, stopThinking: any) => {
+        const now = Date.now();
+        if (now - lastCallTime < throttleDelay) {
+          console.log('Message throttled');
+          return;
+        }
+        lastCallTime = now;
+
+        // Start thinking animation
+        startThinking(id);
+
+        try {
+          const response = await chatApi.sendMessage(message, id);
+          
+          if (currentSessionIdRef.current === id) {
+            addMessage({
+              role: "assistant",
+              content: response.message,
+            });
+          }
+        } catch (error) {
+          console.error("Error sending message:", error);
+          
+          if (currentSessionIdRef.current === id) {
+            addMessage({
+              role: "assistant",
+              content: "I'm sorry, I encountered an error. Please try again.",
+            });
+          }
+        } finally {
+          if (thinkingSessionIdRef.current === id) {
+            stopThinking();
+          }
+        }
+      };
+    })()
+  );
 
   // Handle sending message
-  // ChatContent.tsx
-const handleSendMessage = async (message: string, file?: File, sessionId?: string) => {
-  const id = sessionId || currentSession?.id;
-  if (!id) return;
+  const handleSendMessage = useCallback(async (
+    message: string,
+    file?: File,
+    sessionId?: string
+  ) => {
+    const id = sessionId || currentSessionIdRef.current;
+    if (!id) return;
 
-  // Add user message immediately
-  addMessage({
-    role: "user",
-    content: message,
-    attachments: file ? [file] : undefined,
-  });
-
-  startThinking(); // show thinking messages
-
-  try {
-    const response = await chatApi.sendMessage(message, id);
-
-    // Add assistant reply
     addMessage({
-      role: "assistant",
-      content: response.message,
+      role: "user",
+      content: message,
+      attachments: file ? [file] : undefined,
     });
-  } catch (error) {
-    addMessage({
-      role: "assistant",
-      content: "I'm sorry, I encountered an error. Please try again.",
-    });
-  } finally {
-    stopThinking(); // stop thinking messages
-  }
-};
 
+    // Use throttled message sending
+    sendMessageThrottled.current(message, id, addMessage, startThinking, stopThinking);
+  }, [addMessage, startThinking, stopThinking]);
+
+  // Memoized values for performance
+  const showThinkingMessage = useMemo(() => 
+    isThinking && thinkingSessionId === currentSession?.id, 
+    [isThinking, thinkingSessionId, currentSession?.id]
+  );
+
+  const isInputDisabled = useMemo(() => 
+    inputDisabled === currentSession?.id || isLoadingMessages || sessionTransition, 
+    [inputDisabled, currentSession?.id, isLoadingMessages, sessionTransition]
+  );
+
+  const shouldShowWelcome = useMemo(() => 
+    !currentSession || (currentSession.messages.length === 0 && !showThinkingMessage),
+    [currentSession, showThinkingMessage]
+  );
+
+  // Show loading indicator when loading more messages
+  const showLoadMoreIndicator = useMemo(() => 
+    isLoadingMessages && hasMoreMessages,
+    [isLoadingMessages, hasMoreMessages]
+  );
+
+  // Check if current session has cached messages
+  const hasCachedMessages = useMemo(() => {
+    if (!currentSession) return false;
+    const cached = sessionCacheRef.current.get(currentSession.id);
+    return cached && cached.messages.length > 0;
+  }, [currentSession]);
 
   return (
-    <div className="flex h-screen flex-col md:flex-row">
+    <div className="flex h-screen flex-col md:flex-row ">
       {/* Sidebar */}
       <div className="flex-shrink-0 w-full md:w-64 border-r">
         <ChatSidebar />
@@ -159,36 +386,64 @@ const handleSendMessage = async (message: string, file?: File, sessionId?: strin
       {/* Chat Area */}
       <div className="flex-1 flex flex-col bg-white">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 pb-28"> 
-          {/* 👆 Added pb-28 so messages don't hide behind input */}
-
-          {!currentSession || currentSession.messages.length === 0 ? (
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto p-4 pb-28 relative"
+        >
+          {sessionTransition ? (
+            <SessionLoading />
+          ) : shouldShowWelcome ? (
             <div className="flex h-full items-center justify-center">
               <WelcomeHeader />
             </div>
           ) : (
-            <div className="max-w-4xl mx-auto space-y-2">
-              {currentSession.messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
-              ))}
+          <div className="max-w-4xl mx-auto space-y-2">
+  {/* Load more indicator at the top */}
+  {showLoadMoreIndicator && (
+    <div className="text-center py-4">
+      <div className="inline-flex items-center px-4 py-2 bg-gray-100 rounded-full">
+        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+        <span className="text-sm text-gray-600">Loading older messages...</span>
+      </div>
+    </div>
+  )}
 
-              {isThinking && (
-                <div className="flex justify-start p-2">
-                  <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
-                    <span>{thinkingMessages[thinkingIndex]}</span>
-                    <span className="animate-blink">{'.'.repeat(dots)}</span>
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
+  {/* Show message if using cached data AND there are more messages to load */}
+  {hasCachedMessages && hasMoreMessages && (
+    <div className="text-center py-2 text-sm text-gray-500 italic">
+      Scroll up to load more...
+    </div>
+  )}
+
+  {/* Messages */}
+  {currentSession?.messages.map((message) => (
+    <MemoizedChatMessage key={message.id} message={message} />
+  ))}
+
+  {/* Thinking message */}
+  {showThinkingMessage && (
+    <div className="flex justify-start p-2">
+      <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
+        <span>{thinkingMessage}</span>
+        <span className="min-w-[12px]">{dots}</span>
+      </div>
+    </div>
+  )}
+  
+  {/* Scroll anchor */}
+  <div ref={messagesEndRef} />
+</div>
           )}
         </div>
 
         {/* Input */}
-        <div className="sticky bottom-20 bg-white border-t p-2 md:p-4">
+        <div className="sticky bottom-14 bg-white border-t p-2 md:p-4">
           <div className="max-w-4xl mx-auto w-full">
-            <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+            <ChatInput 
+              onSendMessage={handleSendMessage} 
+              isLoading={isInputDisabled} 
+            />
           </div>
         </div>
       </div>
