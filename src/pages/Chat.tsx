@@ -398,43 +398,42 @@ const ChatContent = () => {
               <WelcomeHeader />
             </div>
           ) : (
-            <div className="max-w-4xl mx-auto space-y-2">
-              {/* Load more indicator at the top */}
-              {showLoadMoreIndicator && (
-                <div className="text-center py-4">
-                  <div className="inline-flex items-center px-4 py-2 bg-gray-100 rounded-full">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
-                    <span className="text-sm text-gray-600">Loading older messages...</span>
-                  </div>
-                </div>
-              )}
+          <div className="max-w-4xl mx-auto space-y-2">
+  {/* Load more indicator at the top */}
+  {showLoadMoreIndicator && (
+    <div className="text-center py-4">
+      <div className="inline-flex items-center px-4 py-2 bg-gray-100 rounded-full">
+        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+        <span className="text-sm text-gray-600">Loading older messages...</span>
+      </div>
+    </div>
+  )}
 
-              {/* Show message if using cached data */}
-              {hasCachedMessages && (
-                <div className="text-center py-2 text-sm text-gray-500 italic">
-                  {/* Showing cached messages. */}
-                   Scroll up to load more...
-                </div>
-              )}
+  {/* Show message if using cached data AND there are more messages to load */}
+  {hasCachedMessages && hasMoreMessages && (
+    <div className="text-center py-2 text-sm text-gray-500 italic">
+      Scroll up to load more...
+    </div>
+  )}
 
-              {/* Messages */}
-              {currentSession?.messages.map((message) => (
-                <MemoizedChatMessage key={message.id} message={message} />
-              ))}
+  {/* Messages */}
+  {currentSession?.messages.map((message) => (
+    <MemoizedChatMessage key={message.id} message={message} />
+  ))}
 
-              {/* Thinking message */}
-              {showThinkingMessage && (
-                <div className="flex justify-start p-2">
-                  <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
-                    <span>{thinkingMessage}</span>
-                    <span className="min-w-[12px]">{dots}</span>
-                  </div>
-                </div>
-              )}
-              
-              {/* Scroll anchor */}
-              <div ref={messagesEndRef} />
-            </div>
+  {/* Thinking message */}
+  {showThinkingMessage && (
+    <div className="flex justify-start p-2">
+      <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
+        <span>{thinkingMessage}</span>
+        <span className="min-w-[12px]">{dots}</span>
+      </div>
+    </div>
+  )}
+  
+  {/* Scroll anchor */}
+  <div ref={messagesEndRef} />
+</div>
           )}
         </div>
 
