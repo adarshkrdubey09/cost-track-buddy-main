@@ -31,33 +31,42 @@ const SessionLoading = () => (
 );
 
 const ChatContent = () => {
-  const { currentSession, setMessages, addMessage, sessions } = useChatContext();
+  const { 
+    currentSession, 
+    addMessage, 
+    loadMoreMessages, 
+    isLoadingMessages, 
+    hasMoreMessages,
+    loadSession,
+    sessions
+  } = useChatContext();
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const [isLoading, setIsLoading] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [thinkingMessage, setThinkingMessage] = useState(thinkingMessages[0]);
   const [dots, setDots] = useState('');
   const [userAtBottom, setUserAtBottom] = useState(true);
   const [thinkingSessionId, setThinkingSessionId] = useState<string | null>(null);
   const [inputDisabled, setInputDisabled] = useState<string | null>(null);
-  const [visibleMessages, setVisibleMessages] = useState<any[]>([]);
-  const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [sessionTransition, setSessionTransition] = useState(false);
+  const [isInitialScrollDone, setIsInitialScrollDone] = useState(false);
 
   const thinkingIntervalRef = useRef<number | null>(null);
   const dotsIntervalRef = useRef<number | null>(null);
-  const hasFetchedRef = useRef<Set<string>>(new Set());
   const currentSessionIdRef = useRef<string | null>(null);
   const thinkingIndexRef = useRef<number>(0);
   const thinkingSessionIdRef = useRef<string | null>(null);
   const isMountedRef = useRef<boolean>(true);
   const scrollDebounceRef = useRef<NodeJS.Timeout | null>(null);
-  const messageBatchSize = 50;
   const lastScrollTopRef = useRef<number>(0);
   const prevSessionIdRef = useRef<string | null>(null);
+  const isInitialLoadRef = useRef<boolean>(true);
+  const isScrollingToLoadMoreRef = useRef<boolean>(false);
+  const previousMessagesLengthRef = useRef<number>(0);
+  const sessionCacheRef = useRef<Map<string, { messages: any[]; hasMore: boolean }>>(new Map());
 
   // Update refs when state changes
   useEffect(() => {
@@ -73,6 +82,12 @@ const ChatContent = () => {
       if (scrollDebounceRef.current) {
         clearTimeout(scrollDebounceRef.current);
       }
+      if (thinkingIntervalRef.current) {
+        clearInterval(thinkingIntervalRef.current);
+      }
+      if (dotsIntervalRef.current) {
+        clearInterval(dotsIntervalRef.current);
+      }
     };
   }, []);
 
@@ -83,66 +98,102 @@ const ChatContent = () => {
     }
   }, [navigate]);
 
-  // Clean up intervals on component unmount
+  // Cache session messages when switching away
   useEffect(() => {
-    return () => {
-      if (thinkingIntervalRef.current) {
-        clearInterval(thinkingIntervalRef.current);
-        thinkingIntervalRef.current = null;
-      }
-      if (dotsIntervalRef.current) {
-        clearInterval(dotsIntervalRef.current);
-        dotsIntervalRef.current = null;
-      }
-    };
-  }, []);
+    if (prevSessionIdRef.current && currentSession) {
+      // Cache the current session's messages before switching
+      sessionCacheRef.current.set(prevSessionIdRef.current, {
+        messages: currentSession.messages,
+        hasMore: hasMoreMessages
+      });
+    }
+  }, [currentSession, hasMoreMessages]);
 
-  // Detect session changes and show loading state
+  // Detect session changes and handle message loading
   useEffect(() => {
     if (currentSession?.id !== prevSessionIdRef.current) {
-      // Only show transition if we're switching to a different session (not initial load)
-      if (prevSessionIdRef.current !== null && currentSession?.id) {
+      const previousSessionId = prevSessionIdRef.current;
+      
+      if (previousSessionId !== null && currentSession?.id) {
         setSessionTransition(true);
         
-        // Hide transition after a short delay or when messages load
-        const timer = setTimeout(() => {
-          if (isMountedRef.current) {
-            setSessionTransition(false);
-          }
-        }, 800);
+        // Check if we have cached messages for this session
+        const cachedSession = sessionCacheRef.current.get(currentSession.id);
         
-        return () => clearTimeout(timer);
+        if (cachedSession && cachedSession.messages.length > 0) {
+          // If we have cached messages, use them immediately
+          setTimeout(() => {
+            if (isMountedRef.current) {
+              setSessionTransition(false);
+              // Scroll to bottom after a short delay to ensure messages are rendered
+              setTimeout(() => {
+                if (messagesEndRef.current && isMountedRef.current) {
+                  messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+                  setUserAtBottom(true);
+                }
+              }, 100);
+            }
+          }, 300);
+        } else {
+          // No cached messages, show loading for longer
+          const timer = setTimeout(() => {
+            if (isMountedRef.current) {
+              setSessionTransition(false);
+              // Scroll to bottom after messages load
+              setTimeout(() => {
+                if (messagesEndRef.current && isMountedRef.current) {
+                  messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+                  setUserAtBottom(true);
+                }
+              }, 100);
+            }
+          }, 800);
+          
+          return () => clearTimeout(timer);
+        }
+      } else if (currentSession?.id) {
+        // Initial load of a session
+        setTimeout(() => {
+          if (messagesEndRef.current && isMountedRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+            setUserAtBottom(true);
+          }
+        }, 100);
       }
       
       prevSessionIdRef.current = currentSession?.id || null;
+      isInitialLoadRef.current = false;
+      setIsInitialScrollDone(false);
     }
   }, [currentSession?.id]);
 
-  // Virtualized message rendering - only show a subset of messages
+  // Auto scroll to bottom on initial load and new messages
   useEffect(() => {
-    if (!currentSession?.messages) return;
-    
-    // Clear transition state once messages are available
-    if (sessionTransition && currentSession.messages.length > 0) {
-      setSessionTransition(false);
-    }
-    
-    // For small message counts, show all messages
-    if (currentSession.messages.length <= messageBatchSize) {
-      setVisibleMessages(currentSession.messages);
-      setHasMoreMessages(false);
-      return;
+    if (!currentSession?.messages.length) return;
+
+    const isNewMessageAdded = currentSession.messages.length > previousMessagesLengthRef.current;
+    const isInitialLoad = previousMessagesLengthRef.current === 0;
+
+    if ((isNewMessageAdded && userAtBottom) || (isInitialLoad && !isInitialScrollDone)) {
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        if (messagesEndRef.current && isMountedRef.current) {
+          messagesEndRef.current.scrollIntoView({ 
+            behavior: isInitialLoad ? 'auto' : 'smooth' 
+          });
+          if (isInitialLoad) {
+            setIsInitialScrollDone(true);
+          }
+        }
+      }, 50);
     }
 
-    // For large message counts, only show the most recent messages initially
-    const recentMessages = currentSession.messages.slice(-messageBatchSize);
-    setVisibleMessages(recentMessages);
-    setHasMoreMessages(currentSession.messages.length > messageBatchSize);
-  }, [currentSession?.messages, sessionTransition]);
+    previousMessagesLengthRef.current = currentSession.messages.length;
+  }, [currentSession?.messages, userAtBottom, isInitialScrollDone]);
 
-  // Debounced scroll handler
+  // Optimized scroll handler with pagination
   const handleScroll = useCallback(() => {
-    if (!scrollContainerRef.current || !currentSession?.messages) return;
+    if (!scrollContainerRef.current || !currentSession?.messages || isLoadingMessages) return;
     
     // Debounce scroll events to improve performance
     if (scrollDebounceRef.current) {
@@ -152,100 +203,33 @@ const ChatContent = () => {
     scrollDebounceRef.current = setTimeout(() => {
       const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current!;
       
-      // If within 50px of bottom, consider user "at bottom"
-      setUserAtBottom(scrollHeight - scrollTop - clientHeight < 50);
+      // If within 100px of bottom, consider user "at bottom"
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
+      setUserAtBottom(isAtBottom);
 
-      // Load more messages when scrolling to the top (for virtualized rendering)
-      if (scrollTop < 100 && hasMoreMessages && currentSession.messages.length > messageBatchSize) {
-        const currentScrollPosition = scrollTop;
-        const currentMessages = currentSession.messages;
-        const currentVisibleCount = visibleMessages.length;
+      // Load more messages when scrolling to the top and there are more to load
+      if (scrollTop < 200 && hasMoreMessages && !isLoadingMessages && !isScrollingToLoadMoreRef.current) {
+        isScrollingToLoadMoreRef.current = true;
         
-        // Load more older messages
-        const startIndex = Math.max(0, currentMessages.length - currentVisibleCount - messageBatchSize);
-        const newVisibleMessages = currentMessages.slice(startIndex);
+        // Store current scroll position and height
+        const currentScrollTop = scrollTop;
+        const currentScrollHeight = scrollHeight;
         
-        setVisibleMessages(newVisibleMessages);
-        
-        // Restore scroll position after updating messages
-        setTimeout(() => {
+        loadMoreMessages().then(() => {
+          // After loading, adjust scroll position to maintain user's view
           if (scrollContainerRef.current) {
             const newScrollHeight = scrollContainerRef.current.scrollHeight;
-            const scrollDifference = newScrollHeight - scrollHeight;
-            scrollContainerRef.current.scrollTop = currentScrollPosition + scrollDifference;
+            const heightDifference = newScrollHeight - currentScrollHeight;
+            scrollContainerRef.current.scrollTop = currentScrollTop + heightDifference;
           }
-        }, 0);
-
-        // Check if we've loaded all messages
-        if (startIndex === 0) {
-          setHasMoreMessages(false);
-        }
+        }).finally(() => {
+          isScrollingToLoadMoreRef.current = false;
+        });
       }
 
       lastScrollTopRef.current = scrollTop;
-    }, 50);
-  }, [currentSession?.messages, visibleMessages.length, hasMoreMessages]);
-
-  // Auto scroll only if user is at bottom
-  useEffect(() => {
-    if (userAtBottom && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [visibleMessages, isThinking, userAtBottom]);
-
-  // Optimized message fetching with caching
-  const fetchMessages = useCallback(async (sessionId: string) => {
-    if (hasFetchedRef.current.has(sessionId)) {
-      return; // Already fetched, no need to fetch again
-    }
-
-    setIsLoading(true);
-    try {
-      const token = localStorage.getItem("access_token");
-      const response = await fetch(
-        `https://ai.rosmerta.dev/chat/conversations/${sessionId}/messages`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-      const data = await response.json();
-
-      setMessages(
-        data.map((msg: any) => ({
-          id: msg.id,
-          role: msg.role,
-          content: msg.content,
-          created_at: msg.created_at,
-        }))
-      );
-      
-      hasFetchedRef.current.add(sessionId);
-    } catch (error) {
-      console.error("Failed to fetch messages:", error);
-      hasFetchedRef.current.delete(sessionId);
-    } finally {
-      if (isMountedRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, [setMessages]);
-
-  // Fetch messages when a conversation is selected
-  useEffect(() => {
-    if (!currentSession) return;
-    
-    // Only fetch if we haven't already fetched this session's messages
-    if (!hasFetchedRef.current.has(currentSession.id)) {
-      fetchMessages(currentSession.id);
-    }
-  }, [currentSession, fetchMessages]);
+    }, 150);
+  }, [currentSession?.messages, isLoadingMessages, hasMoreMessages, loadMoreMessages]);
 
   // Start thinking animation with proper cleanup
   const startThinking = useCallback((sessionId: string) => {
@@ -370,8 +354,8 @@ const ChatContent = () => {
   );
 
   const isInputDisabled = useMemo(() => 
-    inputDisabled === currentSession?.id, 
-    [inputDisabled, currentSession?.id]
+    inputDisabled === currentSession?.id || isLoadingMessages || sessionTransition, 
+    [inputDisabled, currentSession?.id, isLoadingMessages, sessionTransition]
   );
 
   const shouldShowWelcome = useMemo(() => 
@@ -379,8 +363,21 @@ const ChatContent = () => {
     [currentSession, showThinkingMessage]
   );
 
+  // Show loading indicator when loading more messages
+  const showLoadMoreIndicator = useMemo(() => 
+    isLoadingMessages && hasMoreMessages,
+    [isLoadingMessages, hasMoreMessages]
+  );
+
+  // Check if current session has cached messages
+  const hasCachedMessages = useMemo(() => {
+    if (!currentSession) return false;
+    const cached = sessionCacheRef.current.get(currentSession.id);
+    return cached && cached.messages.length > 0;
+  }, [currentSession]);
+
   return (
-    <div className="flex h-screen flex-col md:flex-row">
+    <div className="flex h-screen flex-col md:flex-row ">
       {/* Sidebar */}
       <div className="flex-shrink-0 w-full md:w-64 border-r">
         <ChatSidebar />
@@ -392,7 +389,7 @@ const ChatContent = () => {
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-4 pb-28"
+          className="flex-1 overflow-y-auto p-4 pb-28 relative"
         >
           {sessionTransition ? (
             <SessionLoading />
@@ -402,16 +399,30 @@ const ChatContent = () => {
             </div>
           ) : (
             <div className="max-w-4xl mx-auto space-y-2">
-              {hasMoreMessages && (
-                <div className="text-center py-2 text-sm text-gray-500">
-                  {currentSession!.messages.length - visibleMessages.length} older messages not shown
+              {/* Load more indicator at the top */}
+              {showLoadMoreIndicator && (
+                <div className="text-center py-4">
+                  <div className="inline-flex items-center px-4 py-2 bg-gray-100 rounded-full">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+                    <span className="text-sm text-gray-600">Loading older messages...</span>
+                  </div>
                 </div>
               )}
-              
-              {visibleMessages.map((message) => (
+
+              {/* Show message if using cached data */}
+              {hasCachedMessages && (
+                <div className="text-center py-2 text-sm text-gray-500 italic">
+                  {/* Showing cached messages. */}
+                   Scroll up to load more...
+                </div>
+              )}
+
+              {/* Messages */}
+              {currentSession?.messages.map((message) => (
                 <MemoizedChatMessage key={message.id} message={message} />
               ))}
 
+              {/* Thinking message */}
               {showThinkingMessage && (
                 <div className="flex justify-start p-2">
                   <div className="bg-muted px-4 py-2 rounded-2xl max-w-xs shadow-sm text-sm italic flex items-center gap-1">
@@ -420,17 +431,19 @@ const ChatContent = () => {
                   </div>
                 </div>
               )}
+              
+              {/* Scroll anchor */}
               <div ref={messagesEndRef} />
             </div>
           )}
         </div>
 
         {/* Input */}
-        <div className="sticky bottom-20 bg-white border-t p-2 md:p-4">
+        <div className="sticky bottom-14 bg-white border-t p-2 md:p-4">
           <div className="max-w-4xl mx-auto w-full">
             <ChatInput 
               onSendMessage={handleSendMessage} 
-              isLoading={isInputDisabled || sessionTransition} 
+              isLoading={isInputDisabled} 
             />
           </div>
         </div>
